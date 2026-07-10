@@ -3,8 +3,9 @@ import MLXLLM
 import MLXLMCommon
 
 // MARK: - 本地小模型服务
-// 端侧运行 mlx-community/Qwen3-0.6B-4bit（约 335MB）
-// 首次启动从 HuggingFace 下载参数，缓存进 App 沙盒，之后完全离线。
+// 端侧运行 Qwen3-0.6B-4bit（约 335MB）。
+// 模型权重已随 App 打包（BundledModel/LLMModel → .app/LLMModel），
+// 用 ModelConfiguration(directory:) 从包内本地加载，完全不联网、装好即离线可用。
 // 依赖 Apple MLX（Metal GPU）——必须在真机运行，模拟器不支持。
 
 @MainActor
@@ -13,7 +14,7 @@ final class LocalLLMService: ObservableObject {
     /// 模型加载状态
     enum LoadState: Equatable {
         case idle
-        case downloading(Double)   // 0...1
+        case loading
         case ready
         case failed(String)
     }
@@ -31,28 +32,32 @@ final class LocalLLMService: ObservableObject {
 
     private var container: ModelContainer?
 
-    /// 目标模型：Qwen3 0.6B 4-bit 量化
-    private let modelId = "mlx-community/Qwen3-0.6B-4bit"
+    /// 打包进 App 的模型目录名（folder reference：.app/LLMModel）
+    private let bundledFolder = "LLMModel"
     private let maxTokens = 512
     private let systemPrompt = """
     你是 WUDAX 的徒步助手。WUDAX 是一款为徒步者做疲劳与风险管理的产品，品牌内核取自庄子「无待」——平时安静，关键时刻主动。
     请用简体中文、简洁口语化地回答关于徒步计划、补给、体力、装备与撤退决策的问题。不要给医疗结论。
     """
 
-    // MARK: 加载模型（首次触发下载）
+    // MARK: 加载模型（从 App 包内本地目录，不联网）
 
     func loadIfNeeded() async {
         guard container == nil else { return }
-        if case .downloading = loadState { return }
-        loadState = .downloading(0)
+        if case .loading = loadState { return }
+        loadState = .loading
         do {
-            let config = ModelConfiguration(id: modelId)
-            let loaded = try await LLMModelFactory.shared.loadContainer(configuration: config) { [weak self] progress in
-                Task { @MainActor in
-                    self?.loadState = .downloading(progress.fractionCompleted)
-                }
+            guard let base = Bundle.main.resourceURL else {
+                throw NSError(domain: "WUDAX", code: -1,
+                              userInfo: [NSLocalizedDescriptionKey: "找不到 App 资源目录"])
             }
-            container = loaded
+            let modelURL = base.appendingPathComponent(bundledFolder, isDirectory: true)
+            guard FileManager.default.fileExists(atPath: modelURL.path) else {
+                throw NSError(domain: "WUDAX", code: -2,
+                              userInfo: [NSLocalizedDescriptionKey: "App 内未找到模型（\(bundledFolder)），请确认已打包"])
+            }
+            let config = ModelConfiguration(directory: modelURL)
+            container = try await LLMModelFactory.shared.loadContainer(configuration: config)
             loadState = .ready
         } catch {
             loadState = .failed(error.localizedDescription)

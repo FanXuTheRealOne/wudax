@@ -180,7 +180,7 @@ struct HomeView: View {
         Button { showChat = true } label: {
             InkCard {
                 HStack(spacing: 14) {
-                    Image(systemName: "bubble.left.and.sparkles.fill")
+                    Image(systemName: "bubble.left.fill")
                         .font(.system(size: 24, weight: .light))
                         .foregroundStyle(WDColor.amber)
                         .frame(width: 54, height: 54)

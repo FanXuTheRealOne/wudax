@@ -25,3 +25,6 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# 打包用大模型(用 scripts/fetch_model.py 复现,勿入库)
+WudaX/BundledModel/
