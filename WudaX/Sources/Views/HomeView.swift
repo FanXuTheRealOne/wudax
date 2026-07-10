@@ -5,6 +5,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var session: TripSession
     @State private var showExo = ProcessInfo.processInfo.environment["WUDAX_PHASE"] == "exo"
+    @State private var showChat = false
     @State private var appeared = false
 
     var body: some View {
@@ -18,6 +19,7 @@ struct HomeView: View {
                     session.startPlanning()
                 }
                 fatigueSection
+                aiSection
                 gearSection
                 Spacer(minLength: 40)
             }
@@ -28,6 +30,7 @@ struct HomeView: View {
             withAnimation(.spring(duration: 0.9).delay(0.15)) { appeared = true }
         }
         .sheet(isPresented: $showExo) { ExoShowcaseView() }
+        .sheet(isPresented: $showChat) { ChatView() }
     }
 
     private var mountainHeader: some View {
@@ -171,6 +174,31 @@ struct HomeView: View {
                 Text(note).font(WDFont.caption(10)).foregroundStyle(WDColor.mist.opacity(0.7))
             }
         }
+    }
+
+    private var aiSection: some View {
+        Button { showChat = true } label: {
+            InkCard {
+                HStack(spacing: 14) {
+                    Image(systemName: "bubble.left.and.sparkles.fill")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundStyle(WDColor.amber)
+                        .frame(width: 54, height: 54)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("WUDAX 助手")
+                            .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                        Text("端侧离线小模型 · 随时问徒步的事")
+                            .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13)).foregroundStyle(WDColor.mist)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var gearSection: some View {
