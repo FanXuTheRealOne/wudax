@@ -22,6 +22,10 @@ dist/
 *.swo
 *~
 
+# Codex / Superpowers local workspaces
+.worktrees/
+.superpowers/
+
 # OS
 .DS_Store
 Thumbs.db
