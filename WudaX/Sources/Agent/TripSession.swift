@@ -20,6 +20,8 @@ final class TripSession: ObservableObject {
     @Published var plan = SampleData.plan
     @Published var status = TripStatus()
     @Published var profile = FatigueProfile()
+    let planning = PlanningCoordinator()
+    @Published var planningResult: PlanningResult?
 
     // 行中
     @Published var activeCheckin: CheckinTrigger?
@@ -81,7 +83,26 @@ final class TripSession: ObservableObject {
 
     func startPlanning() {
         plan = SampleData.plan
+        planning.reset()
+        planningResult = nil
         phase = .planningChat
+    }
+
+    func finalizePlanning() {
+        guard let result = planning.buildPlan(profile: profile) else { return }
+        planningResult = result
+        plan.route = result.route
+        plan.readinessScore = result.readiness.score
+        plan.readinessLabel = result.readiness.label
+        plan.challengeGapLabel = result.gap.label
+        plan.routeQualityScore = planning.analyzedGPX?.qualityScore ?? 100
+        plan.equipment = result.equipment
+        plan.suggestedWaterL = result.supply.waterLiters
+        plan.suggestedFoodKcal = result.supply.foodKilocalories
+        plan.riskLevel = result.gap.score >= 4 ? .high : result.load.score >= 5 ? .mediumHigh : .medium
+        plan.topRisks = Array((result.load.reasons + result.gap.reasons + result.readiness.reasons).prefix(3))
+        plan.checkpoints = result.route.riskPoints.map { "\($0.title) · 到达前重新确认状态" }
+        phase = .budgetCard
     }
 
     func answer(_ q: PlanQuestion, with option: String) {
