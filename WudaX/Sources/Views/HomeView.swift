@@ -87,7 +87,7 @@ struct HomeView: View {
                         .foregroundStyle(WDColor.ink)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
-                    Text("开始计划后，在聊天流上传本次 GPX 路线")
+                    Text("点击开始规划后，在流程中选择本次 GPX 路线")
                         .font(WDFont.caption(11)).foregroundStyle(WDColor.ink.opacity(0.55))
 
                     HStack(spacing: 0) {

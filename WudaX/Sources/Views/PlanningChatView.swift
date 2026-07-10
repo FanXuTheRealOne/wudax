@@ -37,12 +37,12 @@ struct PlanningChatView: View {
             }
         }
         .task { await session.planning.begin() }
-        .fileImporter(isPresented: $showImporter,
-                      allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .data],
-                      allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first {
+        .sheet(isPresented: $showImporter) {
+            GPXDocumentPicker { url in
+                showImporter = false
                 session.planning.importGPX(from: url)
             }
+            .ignoresSafeArea()
         }
         .onAppear { withAnimation(.spring(duration: 0.7).delay(0.3)) { showCurrent = true } }
     }
@@ -112,6 +112,11 @@ struct PlanningChatView: View {
                         StatChip(icon: "heart", label: "静息心率", value: healthValue(.restingHeartRate, suffix: " bpm"), tint: WDColor.amber)
                     }
                 }
+                if session.planning.healthKit.authorizationState == .notDetermined {
+                    healthConnectButton(title: "连接 Apple Health")
+                } else if session.planning.healthKit.authorizationState == .denied {
+                    healthConnectButton(title: "重新请求 Apple Health")
+                }
             }
         }
     }
@@ -126,7 +131,7 @@ struct PlanningChatView: View {
                     HStack(spacing: 8) {
                         StatChip(icon: "location", label: "距离", value: String(format: "%.1f km", stats.distanceMeters / 1000), tint: WDColor.bamboo)
                         StatChip(icon: "mountain.2", label: "爬升", value: "\(Int(stats.ascentMeters)) m", tint: WDColor.amber)
-                        StatChip(icon: "checkmark.seal", label: "质量", value: "(analyzed.qualityScore)", tint: analyzed.qualityScore >= 70 ? WDColor.bamboo : WDColor.amber)
+                        StatChip(icon: "checkmark.seal", label: "质量", value: "\(analyzed.qualityScore)/100", tint: analyzed.qualityScore >= 70 ? WDColor.bamboo : WDColor.amber)
                     }
                 } else {
                     Text("计划轨迹和历史活动分开保存；导入后会重新派生距离、爬升和时间质量。")
@@ -209,13 +214,67 @@ struct PlanningChatView: View {
     private var healthTint: Color { healthStatus == "已授权" ? WDColor.bamboo : WDColor.amber }
 
     private var healthDetail: String {
-        if let snapshot = session.planning.healthSnapshot, snapshot.readings.isEmpty { return "未读取到可用样本；继续用问卷补齐，不影响离线路线分析。" }
-        return "只读取徒步准备相关指标；数值带采样时间，不把缺失数据猜成正常。"
+        switch session.planning.healthKit.authorizationState {
+        case .notDetermined:
+            return "开始规划时会自动弹出系统授权；如果系统没有弹窗，可点击下方按钮重试。"
+        case .requesting:
+            return "正在请求 Apple Health 权限，请完成系统弹窗中的逐项授权。"
+        case .denied:
+            return "系统没有提供读取权限；请点击重试，或在设置 → 隐私与安全性 → 健康 → WUDAX 中打开权限。"
+        case .unavailable:
+            return "Apple Health 只能在真实 iPhone 上使用；模拟器不会弹出授权窗口。"
+        case .granted:
+            if let snapshot = session.planning.healthSnapshot, snapshot.readings.isEmpty {
+                return "权限已连接，但没有可读样本；请先在健康 App 中添加数据。"
+            }
+            return "只读取徒步准备相关指标；数值带采样时间，不把缺失数据猜成正常。"
+        }
+    }
+
+    private func healthConnectButton(title: String) -> some View {
+        Button {
+            Task { await session.planning.requestHealthAuthorization() }
+        } label: {
+            Label(title, systemImage: "heart.text.square")
+                .font(WDFont.caption().weight(.semibold))
+                .foregroundStyle(WDColor.amber)
+        }
+        .buttonStyle(.plain)
     }
 
     private func healthValue(_ metric: HealthMetric, suffix: String) -> String {
         guard let value = session.planning.healthSnapshot?.reading(metric)?.value else { return "—" }
         return "\(String(format: "%.1f", value))\(suffix)"
+    }
+}
+
+/// A native document picker is used instead of filtering through a dynamic UTI.
+/// This keeps GPX files stored in iCloud Drive or third-party file providers
+/// selectable and returns a local copy that can be parsed immediately.
+private struct GPXDocumentPicker: UIViewControllerRepresentable {
+    let onPick: (URL) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let gpxType = UTType(filenameExtension: "gpx") ?? .xml
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [gpxType, .xml, .data], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+
+        init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else { return }
+            onPick(url)
+        }
     }
 }
 

@@ -24,8 +24,9 @@ SCREENS = {
     "01_home": (
         "Home screen '行程' : top has small calligraphy wordmark 'wudaX', a serene ink-wash mountain "
         "ridge illustration header, one large route card '武功山 · 龙山村-发云界' showing distance 24.6km, "
-        "ascent 1780m, estimated 9h30m, a small risk badge '中高风险' in amber, a quiet button '导入 GPX 路线', "
-        "below a small section '疲劳档案' with two subtle stat chips (下坡耐受, 补给习惯). Minimal, calm, almost empty."
+        "ascent 1780m, estimated 9h30m, a small risk badge '中高风险' in amber, and one quiet button '开始规划'. "
+        "The home screen must not show a GPX import button; GPX selection belongs inside the planning flow after this button. "
+        "Below, a small section '疲劳档案' with two subtle stat chips (下坡耐受, 补给习惯). Minimal, calm, almost empty."
     ),
     "02_budget_card": (
         "Trip risk budget card screen '行程预算卡': elevation profile chart of the route in thin contour "
