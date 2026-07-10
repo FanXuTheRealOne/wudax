@@ -8,7 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		009FA3DB7C1AB24A59C8C4C8 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E27D044AEB90DF868D73C42 /* Components.swift */; };
+		04B5AEBD3CA9421B4320CF78 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = CBEC7C9D44CD93B70429F7E8 /* MLXLLM */; };
 		0711D7131E1786081B68285C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F1141EBAF7A5AE50F06200 /* Models.swift */; };
+		19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827403BEC8A5090E492B39E7 /* ChatView.swift */; };
+		1B54BCAE031B99668BBC46A2 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A1F41B7346E0AA1F0BAA39C2 /* MLXLMCommon */; };
 		2B8331DEC8E84970E86130C2 /* ink_mountains.png in Resources */ = {isa = PBXBuildFile; fileRef = 245BEC0F4AB55CEC701BD964 /* ink_mountains.png */; };
 		3081C16A97F9D7CCC5D7863E /* AgentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863FBE20F11D9862AC7563DD /* AgentEngine.swift */; };
 		31A177EFE7D9BF7F6ED79D5F /* PlanningChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */; };
@@ -23,6 +26,7 @@
 		A243482BFF114365EF8EF45B /* exoskeleton.usdz in Resources */ = {isa = PBXBuildFile; fileRef = FDA3B802B5ECD7ABFE419DEB /* exoskeleton.usdz */; };
 		A7B1265F6FE36BC3B42E61E8 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B980F5DE0E162ED79E9FA /* ReviewView.swift */; };
 		C3F42CDD2E11808976071512 /* RetreatDecisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A5321727695AF2A56520A5B /* RetreatDecisionView.swift */; };
+		C771352D57038C4FD145A938 /* LocalLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */; };
 		DBBB03FB537B343E1BE479BA /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F4F868B3B84F458B6025F8 /* HomeView.swift */; };
 		DBC719C8D5A3F0E4A1A8C013 /* TripDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C607B46FA5E9883A9102F0D3 /* TripDashboardView.swift */; };
 		DFEE28898874794A0E245ED0 /* WudaXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC92CA489E2E57B3E06486E /* WudaXApp.swift */; };
@@ -42,16 +46,30 @@
 		656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningChatView.swift; sourceTree = "<group>"; };
 		65C147153596622A27B0AFEC /* GatekeeperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatekeeperView.swift; sourceTree = "<group>"; };
 		80ABC1BE1CEE90A1B1231A12 /* exo_thumb.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = exo_thumb.png; sourceTree = "<group>"; };
+		827403BEC8A5090E492B39E7 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		863FBE20F11D9862AC7563DD /* AgentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEngine.swift; sourceTree = "<group>"; };
 		991B980F5DE0E162ED79E9FA /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 		C607B46FA5E9883A9102F0D3 /* TripDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDashboardView.swift; sourceTree = "<group>"; };
 		CAC92CA489E2E57B3E06486E /* WudaXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WudaXApp.swift; sourceTree = "<group>"; };
+		DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMService.swift; sourceTree = "<group>"; };
 		F7F4F868B3B84F458B6025F8 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		FB908F9B7419A36EDBC639C4 /* TripSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripSession.swift; sourceTree = "<group>"; };
 		FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		FD6967BB2FCADB1F89872A65 /* WudaX.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WudaX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDA3B802B5ECD7ABFE419DEB /* exoskeleton.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = exoskeleton.usdz; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7B94A4CBCDB0D976364BA284 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04B5AEBD3CA9421B4320CF78 /* MLXLLM in Frameworks */,
+				1B54BCAE031B99668BBC46A2 /* MLXLMCommon in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		0B08578FDD46AB74808E2330 = {
@@ -91,6 +109,14 @@
 			path = DesignSystem;
 			sourceTree = "<group>";
 		};
+		5DBA94D15D48A4F357B50B14 /* LocalLLM */ = {
+			isa = PBXGroup;
+			children = (
+				DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */,
+			);
+			path = LocalLLM;
+			sourceTree = "<group>";
+		};
 		734F72A7F0869FEC8D215225 /* Agent */ = {
 			isa = PBXGroup;
 			children = (
@@ -104,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				65576A53A4EB3E4062908411 /* BudgetCardView.swift */,
+				827403BEC8A5090E492B39E7 /* ChatView.swift */,
 				02B25E221098169C67365353 /* ExoShowcaseView.swift */,
 				65C147153596622A27B0AFEC /* GatekeeperView.swift */,
 				F7F4F868B3B84F458B6025F8 /* HomeView.swift */,
@@ -121,6 +148,7 @@
 				CAC92CA489E2E57B3E06486E /* WudaXApp.swift */,
 				734F72A7F0869FEC8D215225 /* Agent */,
 				3396B306E394BDC52B5FCCA4 /* DesignSystem */,
+				5DBA94D15D48A4F357B50B14 /* LocalLLM */,
 				EF1C78A8E9FFA6B4BE7EB557 /* Models */,
 				3355C0D94330458CBFC98180 /* Resources */,
 				9B65392483DD97405DAF3966 /* Views */,
@@ -146,6 +174,7 @@
 			buildPhases = (
 				419A2608B957149B0586D77F /* Sources */,
 				583B2C2CCD87243127503F35 /* Resources */,
+				7B94A4CBCDB0D976364BA284 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -153,6 +182,8 @@
 			);
 			name = WudaX;
 			packageProductDependencies = (
+				CBEC7C9D44CD93B70429F7E8 /* MLXLLM */,
+				A1F41B7346E0AA1F0BAA39C2 /* MLXLMCommon */,
 			);
 			productName = WudaX;
 			productReference = FD6967BB2FCADB1F89872A65 /* WudaX.app */;
@@ -182,6 +213,9 @@
 			);
 			mainGroup = 0B08578FDD46AB74808E2330;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				480E2B826090F6568D3F966D /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1838750A13E900ED891304A6 /* Products */;
 			projectDirPath = "";
@@ -214,10 +248,12 @@
 			files = (
 				3081C16A97F9D7CCC5D7863E /* AgentEngine.swift in Sources */,
 				40B2A21B403BC3126FA5516E /* BudgetCardView.swift in Sources */,
+				19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */,
 				009FA3DB7C1AB24A59C8C4C8 /* Components.swift in Sources */,
 				A1489C8B125EC8CC96E7C71F /* ExoShowcaseView.swift in Sources */,
 				5EA7FE66E39FCE548F1D9E22 /* GatekeeperView.swift in Sources */,
 				DBBB03FB537B343E1BE479BA /* HomeView.swift in Sources */,
+				C771352D57038C4FD145A938 /* LocalLLMService.swift in Sources */,
 				0711D7131E1786081B68285C /* Models.swift in Sources */,
 				31A177EFE7D9BF7F6ED79D5F /* PlanningChatView.swift in Sources */,
 				C3F42CDD2E11808976071512 /* RetreatDecisionView.swift in Sources */,
@@ -420,6 +456,30 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		480E2B826090F6568D3F966D /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
+			requirement = {
+				kind = exactVersion;
+				version = 2.25.9;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1F41B7346E0AA1F0BAA39C2 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 480E2B826090F6568D3F966D /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLMCommon;
+		};
+		CBEC7C9D44CD93B70429F7E8 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 480E2B826090F6568D3F966D /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLLM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DACA1365E2ADFB50BAABF1A1 /* Project object */;
 }
