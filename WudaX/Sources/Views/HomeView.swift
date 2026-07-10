@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - 首页「行程」
 
@@ -6,6 +7,7 @@ struct HomeView: View {
     @EnvironmentObject var session: TripSession
     @State private var showExo = ProcessInfo.processInfo.environment["WUDAX_PHASE"] == "exo"
     @State private var showChat = false
+    @State private var showGPXImporter = false
     @State private var appeared = false
 
     var body: some View {
@@ -16,7 +18,7 @@ struct HomeView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 24)
                 GhostButton(title: "导入 GPX 路线", color: WDColor.ricePaper.opacity(0.8)) {
-                    session.startPlanning()
+                    showGPXImporter = true
                 }
                 fatigueSection
                 aiSection
@@ -31,6 +33,22 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showExo) { ExoShowcaseView() }
         .sheet(isPresented: $showChat) { ChatView() }
+        .fileImporter(
+            isPresented: $showGPXImporter,
+            allowedContentTypes: [.xml, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case let .success(urls) = result, let url = urls.first else { return }
+            session.importGPX(from: url)
+        }
+        .alert("GPX 导入", isPresented: Binding(
+            get: { session.routeImportMessage != nil },
+            set: { if !$0 { session.routeImportMessage = nil } }
+        )) {
+            Button("确定", role: .cancel) { session.routeImportMessage = nil }
+        } message: {
+            Text(session.routeImportMessage ?? "")
+        }
     }
 
     private var mountainHeader: some View {
@@ -92,11 +110,11 @@ struct HomeView: View {
                         .lineLimit(1)
 
                     HStack(spacing: 0) {
-                        metric("location", "距离", "24.6", "km")
+                        metric("location", "距离", String(format: "%.1f", session.plan.route.distanceKm), "km")
                         divider
-                        metric("mountain.2", "累计爬升", "1780", "m")
+                        metric("mountain.2", "累计爬升", "\(Int(session.plan.route.ascentM))", "m")
                         divider
-                        metric("clock", "预计耗时", "9h30", "m")
+                        metric("clock", "预计耗时", String(format: "%.1f", session.plan.route.estimatedHours), "h")
                     }
 
                     HStack {

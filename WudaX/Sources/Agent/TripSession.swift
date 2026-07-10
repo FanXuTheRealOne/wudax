@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import CoreLocation
 
 // MARK: - 行程会话：贯穿五阶段的状态机
 
@@ -26,13 +27,30 @@ final class TripSession: ObservableObject {
     @Published var lastDecision: AgentDecision?
     @Published var showRetreatSheet = false
     @Published var tripEndedByRetreat = false
+    @Published var routeMatch: RouteMatch?
+    @Published var routeImportMessage: String?
+    @Published var locationStatusText: String?
 
     // 复盘
     @Published var reviewEntries = SampleData.reviewQuestions
 
     private var timer: AnyCancellable?
+    private var liveCheckinTimer: AnyCancellable?
+    private let locationService = HikeLocationService()
+    private var locationCancellable: AnyCancellable?
+    private var locationStatusCancellable: AnyCancellable?
+    private var routeMatcher: RouteMatchingEngine?
+    private var tripStartedAt: Date?
+    private var lastCheckinAt: Date?
+    private var lastCheckinProgressMeters: Double = 0
 
     init() {
+        locationCancellable = locationService.$latestLocation
+            .compactMap { $0 }
+            .sink { [weak self] location in self?.handle(location: location) }
+        locationStatusCancellable = locationService.$errorMessage
+            .sink { [weak self] message in self?.locationStatusText = message }
+
         // 调试：WUDAX_PHASE 环境变量直接跳转到指定阶段（用于截图验证）
         if let target = ProcessInfo.processInfo.environment["WUDAX_PHASE"] {
             applyDebugPhase(target)
@@ -80,8 +98,27 @@ final class TripSession: ObservableObject {
     // MARK: 阶段流转
 
     func startPlanning() {
-        plan = SampleData.plan
         phase = .planningChat
+    }
+
+    func importGPX(from url: URL) {
+        do {
+            let result = try GPXRouteImporter().load(from: url)
+            var importedPlan = TripPlan(route: result.route)
+            importedPlan.riskLevel = (result.route.ascentM >= 1_200 || result.route.estimatedHours >= 8) ? .mediumHigh : .medium
+            importedPlan.suggestedWaterL = max(1.5, min(5.0, result.route.estimatedHours * profile.waterRatePerHour + 0.5))
+            importedPlan.suggestedFoodKcal = max(800, result.route.estimatedHours * 170)
+            importedPlan.topRisks = routeRisks(for: result.route)
+            importedPlan.checkpoints = result.route.geometry?.waypoints.map(\.name) ?? []
+            plan = importedPlan
+            routeMatcher = result.route.geometry.map { RouteMatchingEngine(route: $0) }
+            routeMatch = nil
+
+            let warningText = result.warnings.isEmpty ? "" : "\n" + result.warnings.joined(separator: "；")
+            routeImportMessage = "已导入 \(result.pointCount) 个轨迹点、\(result.waypointCount) 个航点。\(warningText)"
+        } catch {
+            routeImportMessage = "导入失败：\(error.localizedDescription)"
+        }
     }
 
     func answer(_ q: PlanQuestion, with option: String) {
@@ -108,12 +145,25 @@ final class TripSession: ObservableObject {
         status = TripStatus()
         status.remainingWaterL = plan.waterL ?? 2.5
         status.hoursToSunset = hoursUntilSunset()
+        routeMatch = nil
+        lastDecision = nil
+        tripStartedAt = Date()
+        lastCheckinAt = tripStartedAt
+        lastCheckinProgressMeters = 0
         withAnimation { phase = .inTrip }
-        startSimulation()
+        if plan.route.geometry != nil {
+            routeMatcher = plan.route.geometry.map { RouteMatchingEngine(route: $0) }
+            locationService.startTracking()
+            startLiveCheckins()
+        } else {
+            startSimulation()
+        }
     }
 
     func endTrip(retreated: Bool) {
         stopSimulation()
+        stopLiveCheckins()
+        locationService.stopTracking()
         tripEndedByRetreat = retreated
         activeCheckin = nil
         showRetreatSheet = false
@@ -166,6 +216,53 @@ final class TripSession: ObservableObject {
         }
     }
 
+    private func handle(location: CLLocation) {
+        guard phase == .inTrip, let routeMatcher else { return }
+        let match = routeMatcher.match(location: location)
+        routeMatch = match
+        status.routeConfidence = match.confidence
+        status.isOffRoute = match.isOffRoute
+        status.routeMatchReason = match.reason
+        status.elapsedKm = match.routeProgressMeters / 1_000
+        if let tripStartedAt {
+            status.elapsedHours = max(0, Date().timeIntervalSince(tripStartedAt) / 3_600)
+        }
+        status.hoursToSunset = hoursUntilSunset()
+
+        let profileCount = plan.route.elevationProfile.count
+        if profileCount > 1, plan.route.distanceKm > 0 {
+            status.profileIndex = min(profileCount - 1, max(0, Int((status.elapsedKm / plan.route.distanceKm) * Double(profileCount - 1))))
+        }
+        status.upcomingLongDescent = match.remainingAscentMeters < 50 && match.remainingDistanceMeters > 1_000
+
+        if match.isOffRoute, activeCheckin == nil, !showRetreatSheet {
+            triggerCheckin(.offRoute)
+        } else if match.routeProgressMeters - lastCheckinProgressMeters >= 3_000,
+                  activeCheckin == nil,
+                  !showRetreatSheet {
+            triggerCheckin(.timer)
+        }
+    }
+
+    private func startLiveCheckins() {
+        liveCheckinTimer = Timer.publish(every: 60, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self,
+                      self.phase == .inTrip,
+                      self.activeCheckin == nil,
+                      !self.showRetreatSheet,
+                      let lastCheckinAt = self.lastCheckinAt,
+                      Date().timeIntervalSince(lastCheckinAt) >= 45 * 60 else { return }
+                self.triggerCheckin(.timer)
+            }
+    }
+
+    private func stopLiveCheckins() {
+        liveCheckinTimer?.cancel()
+        liveCheckinTimer = nil
+    }
+
     private func triggerCheckin(_ t: CheckinTrigger) {
         guard activeCheckin == nil else { return }
         withAnimation(.spring(duration: 0.5)) { activeCheckin = t }
@@ -178,6 +275,8 @@ final class TripSession: ObservableObject {
         status.remainingWaterL = water
         status.kneePain = knee
         status.drowsiness = drowsy
+        lastCheckinAt = Date()
+        lastCheckinProgressMeters = routeMatch?.routeProgressMeters ?? status.elapsedKm * 1_000
         let decision = AgentEngine.evaluate(status: status, plan: plan)
         lastDecision = decision
         withAnimation(.spring(duration: 0.5)) {
@@ -191,6 +290,14 @@ final class TripSession: ObservableObject {
     private func hoursUntilSunset() -> Double {
         guard let sunset = plan.sunsetTime, let dep = plan.departureTime else { return 8 }
         return max(sunset.timeIntervalSince(dep) / 3600 - 1, 4)
+    }
+
+    private func routeRisks(for route: Route) -> [String] {
+        var risks: [String] = []
+        if route.ascentM >= 1_000 { risks.append("累计爬升 \(Int(route.ascentM)) m，体能消耗较高") }
+        if route.estimatedHours >= 8 { risks.append("预计行程 \(String(format: "%.1f", route.estimatedHours)) 小时，需要预留返程缓冲") }
+        if route.waterSourceCount == 0 { risks.append("GPX 未验证补水点，请自行确认补给与撤离点") }
+        return risks
     }
 }
 
