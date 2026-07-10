@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 @testable import WudaX
 
 final class GPXParserTests: XCTestCase {
@@ -139,6 +140,21 @@ final class GPXParserTests: XCTestCase {
         let document = try JSONDecoder().decode(GPXDocument.self, from: legacy)
         XCTAssertEqual(document.ignoredPointCount, 0)
         XCTAssertEqual(document.ignoredWaypointCount, 0)
+    }
+
+    func testBackgroundLocationUpdatesRequireAlwaysAuthorizationAndCapability() {
+        XCTAssertFalse(LocationService.shouldEnableBackgroundLocationUpdates(
+            authorizationStatus: .authorizedAlways,
+            hasBackgroundLocationMode: false
+        ))
+        XCTAssertTrue(LocationService.shouldEnableBackgroundLocationUpdates(
+            authorizationStatus: .authorizedAlways,
+            hasBackgroundLocationMode: true
+        ))
+        XCTAssertFalse(LocationService.shouldEnableBackgroundLocationUpdates(
+            authorizationStatus: .authorizedWhenInUse,
+            hasBackgroundLocationMode: true
+        ))
     }
 
     private func fixtureData() throws -> Data {
