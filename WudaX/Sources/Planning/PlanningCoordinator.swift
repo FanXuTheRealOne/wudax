@@ -16,6 +16,7 @@ final class PlanningCoordinator: ObservableObject {
         enum Role: Equatable { case assistant, user, status }
         enum Card: Equatable {
             case health
+            case healthHistory
             case questionnaire
             case route
             case report
@@ -31,6 +32,7 @@ final class PlanningCoordinator: ObservableObject {
     @Published private(set) var chat: [ChatItem] = []
     @Published var importError: String?
     @Published var subjective: [String: Double] = [:]
+    @Published var personalHealth = PersonalHealthProfile()
 
     let healthKit = HealthKitService()
     private let parser = GPXParser()
@@ -44,6 +46,7 @@ final class PlanningCoordinator: ObservableObject {
         chat = []
         importError = nil
         subjective = [:]
+        personalHealth = PersonalHealthProfile()
     }
 
     func begin() async {
@@ -61,7 +64,7 @@ final class PlanningCoordinator: ObservableObject {
         } else {
             addStatus("HealthKit 未提供数据。你仍可继续，准备度会按问卷和路线信息计算。")
         }
-        addAssistant("请先导入本次路线 GPX。导入后我会检查轨迹、海拔、时间间隔和异常点。", card: .route)
+        addAssistant("在导入路线前，我需要了解几项个人健康史：当前或近期伤病、既往手术恢复情况，以及是否有慢性病、个人药物或医生限制。", card: .healthHistory)
     }
 
     /// Re-run the system authorization request from the visible HealthKit card.
@@ -96,14 +99,41 @@ final class PlanningCoordinator: ObservableObject {
         }
     }
 
+    func answerInjury(_ value: InjuryLocation) {
+        personalHealth.injury = value
+        addUser("当前或近期伤病：\(value.rawValue)")
+    }
+
+    func answerSurgery(_ value: SurgeryHistory) {
+        personalHealth.surgery = value
+        if value == .none { personalHealth.surgeryLocation = nil }
+        addUser("手术史：\(value.rawValue)")
+    }
+
+    func answerSurgeryLocation(_ value: SurgeryLocation) {
+        personalHealth.surgeryLocation = value
+        addUser("既往手术部位：\(value.rawValue)")
+    }
+
+    func answerMedicalConsideration(_ value: MedicalConsideration) {
+        let wasComplete = personalHealth.isComplete
+        personalHealth.medicalConsideration = value
+        addUser("需要特别注意的情况：\(value.rawValue)")
+        if !wasComplete && personalHealth.isComplete {
+            addAssistant("个人健康情况已记录。现在请导入本次路线 GPX，我会检查轨迹、海拔、时间间隔和异常点。", card: .route)
+        }
+    }
+
     func answerSleep(_ hours: Double) { subjective["sleepHours"] = hours; addUser("最近睡眠约 \(String(format: "%.1f", hours)) 小时") }
     func answerFatigue(_ score: Double) { subjective["fatigue"] = score; addUser("主观疲劳 \(Int(score))/10") }
     func answerPain(_ score: Double) { subjective["pain"] = score; addUser("当前疼痛 \(Int(score))/10") }
 
     func buildPlan(profile: FatigueProfile) -> PlanningResult? {
-        guard let analyzedGPX else { return nil }
+        guard let analyzedGPX, personalHealth.isComplete else { return nil }
         let route = Route(analyzedGPX: analyzedGPX)
-        let readiness = HikingRuleTools.calculateUserReadiness(snapshot: healthSnapshot, subjective: subjective)
+        let readiness = HikingRuleTools.calculateUserReadiness(snapshot: healthSnapshot,
+                                                               subjective: subjective,
+                                                               personalHealth: personalHealth)
         let load = HikingRuleTools.calculateRouteLoad(route: route)
         let gap = HikingRuleTools.calculateChallengeGap(route: route, profile: profile, readiness: readiness)
         let supply = HikingRuleTools.calculateSupplyBudget(route: route, profile: profile)
