@@ -184,7 +184,9 @@ struct PlanningChatView: View {
                         guard let value = SurgeryHistory(rawValue: option) else { return }
                         session.planning.answerSurgery(value)
                     }
-                } else if session.planning.personalHealth.surgery != .none && session.planning.personalHealth.surgeryLocation == nil {
+                } else if let surgery = session.planning.personalHealth.surgery,
+                          surgery != .none,
+                          session.planning.personalHealth.surgeryLocation == nil {
                     Text("手术涉及哪个部位？")
                         .font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
                     FlowChips(options: SurgeryLocation.allCases.map(\.rawValue)) { option in

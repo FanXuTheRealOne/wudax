@@ -11,6 +11,8 @@ struct GPXTrackPoint: Codable, Equatable, Sendable {
     var elevationMeters: Double?
     var time: Date?
     var speedMetersPerSecond: Double?
+    var heartRateBPM: Double?
+    var cadenceRPM: Double?
 }
 
 struct GPXTrackSegment: Codable, Equatable, Sendable {
@@ -25,11 +27,63 @@ struct GPXWaypoint: Codable, Equatable, Sendable {
 }
 
 struct GPXDocument: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case creator
+        case segments
+        case waypoints
+        case purpose
+        case ignoredPointCount
+        case ignoredWaypointCount
+    }
+
     var name: String
     var creator: String?
     var segments: [GPXTrackSegment]
     var waypoints: [GPXWaypoint]
     var purpose: RoutePurpose
+    var ignoredPointCount: Int = 0
+    var ignoredWaypointCount: Int = 0
+
+    init(
+        name: String,
+        creator: String?,
+        segments: [GPXTrackSegment],
+        waypoints: [GPXWaypoint],
+        purpose: RoutePurpose,
+        ignoredPointCount: Int = 0,
+        ignoredWaypointCount: Int = 0
+    ) {
+        self.name = name
+        self.creator = creator
+        self.segments = segments
+        self.waypoints = waypoints
+        self.purpose = purpose
+        self.ignoredPointCount = ignoredPointCount
+        self.ignoredWaypointCount = ignoredWaypointCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        creator = try container.decodeIfPresent(String.self, forKey: .creator)
+        segments = try container.decode([GPXTrackSegment].self, forKey: .segments)
+        waypoints = try container.decode([GPXWaypoint].self, forKey: .waypoints)
+        purpose = try container.decode(RoutePurpose.self, forKey: .purpose)
+        ignoredPointCount = try container.decodeIfPresent(Int.self, forKey: .ignoredPointCount) ?? 0
+        ignoredWaypointCount = try container.decodeIfPresent(Int.self, forKey: .ignoredWaypointCount) ?? 0
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(creator, forKey: .creator)
+        try container.encode(segments, forKey: .segments)
+        try container.encode(waypoints, forKey: .waypoints)
+        try container.encode(purpose, forKey: .purpose)
+        try container.encode(ignoredPointCount, forKey: .ignoredPointCount)
+        try container.encode(ignoredWaypointCount, forKey: .ignoredWaypointCount)
+    }
 
     var points: [GPXTrackPoint] { segments.flatMap(\.points) }
 
@@ -41,6 +95,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
                 var stripped = point
                 stripped.time = nil
                 stripped.speedMetersPerSecond = nil
+                stripped.heartRateBPM = nil
+                stripped.cadenceRPM = nil
                 return stripped
             })
         }
@@ -62,11 +118,13 @@ struct TrackStatistics: Codable, Equatable, Sendable {
 struct DataQualityIssue: Identifiable, Codable, Equatable, Sendable {
     enum Kind: String, Codable, Hashable, Sendable {
         case tooFewPoints
+        case invalidCoordinate
         case missingElevation
         case missingTime
         case timeRegression
         case longTimeGap
         case repeatedCoordinate
+        case unreasonableSpeed
     }
 
     var id = UUID()
@@ -84,10 +142,12 @@ struct AnalyzedGPX: Codable, Equatable, Sendable {
         let penalty = qualityIssues.reduce(0) { partial, issue in
             switch issue.kind {
             case .tooFewPoints: partial + 45
+            case .invalidCoordinate: partial + min(issue.count * 4, 20)
             case .timeRegression: partial + min(issue.count * 5, 20)
             case .longTimeGap: partial + min(issue.count * 8, 24)
             case .missingElevation, .missingTime: partial + min(issue.count, 20)
             case .repeatedCoordinate: partial + min(issue.count / 10, 15)
+            case .unreasonableSpeed: partial + min(issue.count * 3, 18)
             }
         }
         return max(0, 100 - penalty)
