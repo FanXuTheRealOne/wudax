@@ -124,6 +124,7 @@ final class HealthKitService: ObservableObject {
             }
             observerQueries.append(query)
             store.execute(query)
+            store.enableBackgroundDelivery(for: type, frequency: .hourly) { _, _ in }
         }
     }
 
