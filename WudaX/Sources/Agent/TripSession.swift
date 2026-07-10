@@ -24,10 +24,12 @@ final class TripSession: ObservableObject {
     let planning = PlanningCoordinator()
     @Published var planningResult: PlanningResult?
     let location = LocationService()
+    let recorder = TripTrackRecorder()
     let offlineResources = OfflineResourceManager()
     let notifications = NotificationService()
     let tripStore = TripStore()
     @Published var events: [TripEvent] = []
+    @Published var latestHealthSnapshot: HealthSnapshot?
 
     // 行中
     @Published var activeCheckin: CheckinTrigger?
@@ -41,10 +43,15 @@ final class TripSession: ObservableObject {
     private var riskTimer: AnyCancellable?
     private var tripStartDate: Date?
     private var currentTripID = UUID()
+    private var lastRiskLevel: RiskLevel = .low
+    private var lastOffRouteEventAt: Date?
 
     init() {
         location.onLocationUpdate = { [weak self] location in
             self?.handleLocation(location)
+        }
+        planning.healthKit.onSnapshotUpdate = { [weak self] snapshot in
+            self?.handleHealthSnapshot(snapshot)
         }
         // 调试：WUDAX_PHASE 环境变量直接跳转到指定阶段（用于截图验证）
         if let target = ProcessInfo.processInfo.environment["WUDAX_PHASE"] {
@@ -113,7 +120,9 @@ final class TripSession: ObservableObject {
         plan.riskLevel = result.gap.score >= 4 ? .high : result.load.score >= 5 ? .mediumHigh : .medium
         plan.topRisks = Array((result.load.reasons + result.gap.reasons + result.readiness.reasons).prefix(3))
         plan.checkpoints = result.route.riskPoints.map { "\($0.title) · 到达前重新确认状态" }
-        if let analyzed = planning.analyzedGPX { offlineResources.prepare(analyzedGPX: analyzed) }
+        if let analyzed = planning.analyzedGPX {
+            offlineResources.prepare(analyzedGPX: analyzed, originalGPXData: planning.importedGPXData)
+        }
         phase = .budgetCard
     }
 
@@ -143,15 +152,24 @@ final class TripSession: ObservableObject {
         tripStartDate = Date()
         currentTripID = UUID()
         events = []
+        lastRiskLevel = .low
+        lastOffRouteEventAt = nil
+        recorder.start()
         withAnimation { phase = .inTrip }
         location.startMonitoring()
-        Task { await notifications.requestAuthorization() }
+        Task {
+            _ = await notifications.requestAuthorization()
+            if planning.healthKit.authorizationState == .granted {
+                latestHealthSnapshot = await planning.healthKit.fetchSnapshot()
+            }
+        }
         startMonitoring()
     }
 
     func endTrip(retreated: Bool) {
         stopMonitoring()
         location.stopMonitoring()
+        recorder.stop()
         persistTrip()
         tripEndedByRetreat = retreated
         activeCheckin = nil
@@ -184,16 +202,26 @@ final class TripSession: ObservableObject {
         if let tripStartDate { status.elapsedHours = Date().timeIntervalSince(tripStartDate) / 3600 }
         status.hoursToSunset = max(hoursUntilSunset() - status.elapsedHours, 0)
         status.remainingWaterL = max((plan.waterL ?? status.remainingWaterL) - status.elapsedHours * profile.waterRatePerHour, 0)
+        if plan.route.estimatedHours > 0 {
+            let expectedFraction = min(status.elapsedHours / plan.route.estimatedHours, 1)
+            let actualFraction = plan.route.distanceKm > 0 ? min(status.elapsedKm / plan.route.distanceKm, 1) : 0
+            status.planDeltaMin = Int(((actualFraction - expectedFraction) * plan.route.estimatedHours * 60).rounded())
+        }
         status.upcomingLongDescent = status.profileIndex >= 22 && status.profileIndex <= 26
 
-        let risk = HikingRuleTools.evaluateFatigueRisk(status: status, plan: plan)
+        let risk = HikingRuleTools.evaluateFatigueRisk(status: status, plan: plan, snapshot: latestHealthSnapshot)
         let action = HikingRuleTools.selectControlledAction(risk: risk, status: status, plan: plan)
-        if risk.level == .high || risk.level == .mediumHigh {
+        if risk.level.rank > lastRiskLevel.rank {
+            lastRiskLevel = risk.level
             lastDecision = AgentDecision(verdict: risk.level == .high ? .retreat : .downgrade,
                                          reasons: risk.reasons, watchHint: action.title, detail: action.detail)
+            events.append(.init(date: Date(), title: "主动风险升级", detail: risk.reasons.joined(separator: "；"), risk: risk.level))
+            notifications.postIfNeeded(risk: risk, action: action)
         }
 
-        if status.profileIndex >= 24 && lastDecision?.verdict != .downgrade && lastDecision?.verdict != .retreat {
+        if risk.level.rank >= RiskLevel.mediumHigh.rank && activeCheckin == nil {
+            triggerCheckin(.slowProgress)
+        } else if status.profileIndex >= 24 && lastDecision?.verdict != .downgrade && lastDecision?.verdict != .retreat {
             triggerCheckin(.beforeDescent)
         } else if status.hoursToSunset <= 3 && status.hoursToSunset > 2.5 {
             triggerCheckin(.sunset)
@@ -205,18 +233,34 @@ final class TripSession: ObservableObject {
     }
 
     private func handleLocation(_ location: CLLocation) {
+        recorder.append(location)
         guard phase == .inTrip, let analyzed = planning.analyzedGPX,
               let progress = HikingRuleTools.matchRouteProgress(document: analyzed.document,
                                                                  latitude: location.coordinate.latitude,
                                                                  longitude: location.coordinate.longitude) else { return }
         status.elapsedKm = progress.fractionComplete * plan.route.distanceKm
+        if recorder.distanceMeters > 0 {
+            status.elapsedKm = min(plan.route.distanceKm, max(status.elapsedKm, recorder.distanceMeters / 1000))
+        }
+        if plan.route.estimatedHours > 0 {
+            let expectedFraction = min(status.elapsedHours / plan.route.estimatedHours, 1)
+            status.planDeltaMin = Int(((progress.fractionComplete - expectedFraction) * plan.route.estimatedHours * 60).rounded())
+        }
         status.profileIndex = min(Int(progress.fractionComplete * Double(max(plan.route.elevationProfile.count - 1, 0))),
                                   max(plan.route.elevationProfile.count - 1, 0))
         status.upcomingLongDescent = status.profileIndex >= max(plan.route.elevationProfile.count - 5, 0)
-        if progress.distanceToRouteMeters > 120 {
+        let canRecordOffRouteEvent = lastOffRouteEventAt.map { Date().timeIntervalSince($0) >= 5 * 60 } ?? true
+        if progress.distanceToRouteMeters > 120 && canRecordOffRouteEvent {
+            lastOffRouteEventAt = Date()
             events.append(.init(date: Date(), title: "偏离已导入路线", detail: "当前位置距路线约 \(Int(progress.distanceToRouteMeters)) m", risk: .mediumHigh))
             triggerCheckin(.keypoint)
         }
+        evaluateActiveStatus()
+    }
+
+    private func handleHealthSnapshot(_ snapshot: HealthSnapshot) {
+        latestHealthSnapshot = snapshot
+        guard phase == .inTrip else { return }
         evaluateActiveStatus()
     }
 
@@ -234,8 +278,9 @@ final class TripSession: ObservableObject {
         status.drowsiness = drowsy
         let decision = AgentEngine.evaluate(status: status, plan: plan)
         lastDecision = decision
-        let risk = HikingRuleTools.evaluateFatigueRisk(status: status, plan: plan)
+        let risk = HikingRuleTools.evaluateFatigueRisk(status: status, plan: plan, snapshot: latestHealthSnapshot)
         let action = HikingRuleTools.selectControlledAction(risk: risk, status: status, plan: plan)
+        if risk.level.rank > lastRiskLevel.rank { lastRiskLevel = risk.level }
         notifications.postIfNeeded(risk: risk, action: action)
         events.append(.init(date: Date(), title: decision.verdict.rawValue, detail: decision.reasons.joined(separator: "；"), risk: risk.level))
         withAnimation(.spring(duration: 0.5)) {
@@ -263,7 +308,8 @@ final class TripSession: ObservableObject {
         let stored = StoredTrip(id: currentTripID, completedAt: Date(), route: planning.analyzedGPX?.document,
                                 summary: HikingRuleTools.summarizeTrip(plan: plan, status: status, peakRisk: peak,
                                                                         keyEvents: events.map(\.title)),
-                                events: events, reviewAnswers: answers, trainingAdvice: advice)
+                                events: events, reviewAnswers: answers, trainingAdvice: advice,
+                                recordedTrack: recorder.points)
         tripStore.save(stored)
     }
 }

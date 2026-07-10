@@ -1,8 +1,8 @@
-import CoreLocation
+@preconcurrency import CoreLocation
 import Combine
 
 @MainActor
-final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
     enum AuthorizationState: Equatable {
         case notDetermined, whenInUse, always, denied, restricted
     }
@@ -27,11 +27,17 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         manager.requestWhenInUseAuthorization()
     }
 
+    func requestBackgroundPermission() {
+        guard manager.authorizationStatus == .authorizedWhenInUse else { return }
+        manager.requestAlwaysAuthorization()
+    }
+
     func startMonitoring() {
         requestPermission()
         guard manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways else { return }
-        manager.allowsBackgroundLocationUpdates = true
+        manager.allowsBackgroundLocationUpdates = manager.authorizationStatus == .authorizedAlways
         manager.pausesLocationUpdatesAutomatically = false
+        manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
         isMonitoring = true
     }
@@ -43,6 +49,9 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         updateAuthorizationState(manager.authorizationStatus)
+        if manager.authorizationStatus == .authorizedWhenInUse {
+            manager.requestAlwaysAuthorization()
+        }
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
             startMonitoring()
         }

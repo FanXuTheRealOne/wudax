@@ -9,6 +9,7 @@ struct StoredTrip: Identifiable, Codable, Equatable, Sendable {
     var events: [TripEvent]
     var reviewAnswers: [String: String]
     var trainingAdvice: TrainingAdvice
+    var recordedTrack: [RecordedTrackPoint] = []
 }
 
 @MainActor
