@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 // MARK: - Stage 1：连续聊天式行前采集
 
@@ -94,6 +95,17 @@ struct PlanningChatView: View {
                 }
                 Text(healthDetail)
                     .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                if session.planning.healthKit.authorizationState == .denied {
+                    Button("打开系统设置重新授权") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    }
+                    .font(WDFont.caption().weight(.semibold))
+                    .foregroundStyle(WDColor.amber)
+                }
+                if let error = session.planning.healthKit.lastError {
+                    Text(error).font(WDFont.caption(11)).foregroundStyle(WDColor.amber)
+                }
                 if let snapshot = session.planning.healthSnapshot, !snapshot.readings.isEmpty {
                     HStack(spacing: 8) {
                         StatChip(icon: "bed.double", label: "睡眠", value: healthValue(.sleepDuration, suffix: " h"), tint: WDColor.bamboo)

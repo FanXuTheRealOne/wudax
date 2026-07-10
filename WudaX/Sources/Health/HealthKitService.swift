@@ -14,6 +14,7 @@ final class HealthKitService: ObservableObject {
 
     @Published private(set) var authorizationState: AuthorizationState
     @Published private(set) var lastSnapshot: HealthSnapshot?
+    @Published private(set) var lastError: String?
     var onSnapshotUpdate: ((HealthSnapshot) -> Void)?
 
     private let store = HKHealthStore()
@@ -44,9 +45,11 @@ final class HealthKitService: ObservableObject {
         authorizationState = .requesting
         do {
             try await store.requestAuthorization(toShare: [], read: requestedTypes)
+            lastError = nil
             authorizationState = .granted
             startObservers()
         } catch {
+            lastError = error.localizedDescription
             authorizationState = .denied
         }
         return authorizationState
@@ -104,6 +107,11 @@ final class HealthKitService: ObservableObject {
 
         let snapshot = HealthSnapshot(capturedAt: date, readings: readings, unavailableMetrics: unavailable, authorizationGranted: true)
         lastSnapshot = snapshot
+        if readings.isEmpty {
+            lastError = "HealthKit 没有返回可读样本；请在系统健康权限中逐项允许，并确认健康 App 中已有数据。"
+        } else {
+            lastError = nil
+        }
         return snapshot
     }
 
