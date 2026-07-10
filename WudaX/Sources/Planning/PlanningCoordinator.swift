@@ -40,7 +40,7 @@ final class PlanningCoordinator: ObservableObject {
         switch stage {
         case .requestingHealth, .collecting, .routeImported, .ready:
             return true
-        case .idle, .requestingHealth:
+        case .idle:
             return false
         }
     }

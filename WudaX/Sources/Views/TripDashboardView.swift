@@ -13,6 +13,7 @@ struct TripDashboardView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
                         progressCard
+                        routeMatchingCard
                         if let d = session.lastDecision { verdictCard(d) }
                         if let document = session.planning.analyzedGPX?.document { routeMapCard(document) }
                         resourceCard
@@ -84,6 +85,92 @@ struct TripDashboardView: View {
         }
     }
 
+    private var routeMatchingCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("GPX 路线匹配", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(WDFont.heading(15)).foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    Text(confidenceLabel(session.routeMatch?.confidence))
+                        .font(WDFont.caption())
+                        .foregroundStyle(confidenceTint(session.routeMatch))
+                }
+
+                if let match = session.routeMatch {
+                    Text(routeStatusText(match))
+                        .font(WDFont.body(15).weight(.medium))
+                        .foregroundStyle(match.isOffRoute ? WDColor.amber : WDColor.ricePaper)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 12) {
+                        Label(String(format: "剩余 %.1f km", match.remainingDistanceMeters / 1_000),
+                              systemImage: "flag.checkered")
+                        Label("剩余爬升 \(Int(match.remainingAscentMeters.rounded())) m",
+                              systemImage: "mountain.2")
+                    }
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+
+                    if let waypoint = match.nextWaypoint,
+                       let distance = match.distanceToNextWaypointMeters {
+                        Label("下一航点：\(waypoint.name ?? "未命名航点") · \(Int(distance.rounded())) m",
+                              systemImage: "mappin.and.ellipse")
+                            .font(WDFont.caption(11)).foregroundStyle(WDColor.bamboo)
+                    }
+
+                    if match.isOffRoute {
+                        Label("估计距计划路线 \(Int(match.distanceToRouteMeters.rounded())) m",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(WDFont.body(13).weight(.semibold)).foregroundStyle(WDColor.amber)
+                    }
+                    Text(match.reason)
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                } else {
+                    Text("等待第一个可用 GPS 定位，路线已在本地准备。")
+                        .font(WDFont.body(14)).foregroundStyle(WDColor.mist)
+                }
+            }
+        }
+    }
+
+    private func routeStatusText(_ match: RouteMatchResult) -> String {
+        switch match.confidence {
+        case .high:
+            return String(format: "位于路线第 %.1f km，距终点 %.1f km",
+                          match.routeProgressMeters / 1_000, match.remainingDistanceMeters / 1_000)
+        case .medium:
+            if let start = match.progressRangeStartMeters, let end = match.progressRangeEndMeters {
+                return String(format: "估计位于路线第 %.1f–%.1f km", start / 1_000, end / 1_000)
+            }
+            return String(format: "大致位于路线第 %.1f km，定位仍在连续校验",
+                          match.routeProgressMeters / 1_000)
+        case .low:
+            return "定位不稳定，请在下一个明显路标确认位置"
+        case .none:
+            return "暂无法确认路线位置，显示最后可信位置"
+        }
+    }
+
+    private func confidenceLabel(_ confidence: RouteMatchConfidence?) -> String {
+        switch confidence {
+        case .some(.high): "高置信"
+        case .some(.medium): "中置信"
+        case .some(.low): "低置信"
+        case .some(.none): "无置信"
+        case nil: "等待定位"
+        }
+    }
+
+    private func confidenceTint(_ match: RouteMatchResult?) -> Color {
+        guard let match else { return WDColor.mist }
+        if match.isOffRoute { return WDColor.amber }
+        switch match.confidence {
+        case .high: return WDColor.bamboo
+        case .medium: return WDColor.ricePaper
+        case .low, .none: return WDColor.amber
+        }
+    }
+
     private func verdictCard(_ d: AgentDecision) -> some View {
         InkCard {
             HStack(spacing: 14) {
@@ -108,7 +195,7 @@ struct TripDashboardView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.offlineResources.status.mode.rawValue)
                         .font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
-                    Text(session.location.isMonitoring ? "定位持续记录，前台规则最多每 30 秒重算" : "定位未持续更新；状态判断会降低可信度")
+                    Text(session.location.isMonitoring ? "GPS、路线匹配与偏航判断均在本机持续运行" : "定位未持续更新；状态判断会降低可信度")
                         .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
                 }
                 Spacer()
@@ -126,10 +213,17 @@ struct TripDashboardView: View {
                     Text("GPS \(session.location.isMonitoring ? "已连接" : "等待授权")")
                         .font(WDFont.caption()).foregroundStyle(session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
                 }
-                RouteMapView(points: document.points, currentCoordinate: session.location.latestLocation?.coordinate)
+                RouteMapView(
+                    points: document.points,
+                    currentCoordinate: session.location.latestLocation?.coordinate,
+                    matchedCoordinate: session.routeMatch?.matchedCoordinate,
+                    horizontalAccuracyMeters: session.location.latestLocation?.horizontalAccuracy,
+                    matchConfidence: session.routeMatch?.confidence,
+                    isOffRoute: session.routeMatch?.isOffRoute ?? false
+                )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                Text("路线线条来自本地 GPX；未准备地图瓦片时，底图可能不可用，但轨迹和定位仍可工作。")
+                Text("路线线条、候选段匹配和偏航判断来自本地 GPX；无地图瓦片时仍可工作。")
                     .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
             }
         }

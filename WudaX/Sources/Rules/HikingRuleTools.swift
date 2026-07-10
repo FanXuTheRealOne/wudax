@@ -104,18 +104,27 @@ enum HikingRuleTools {
     }
 
     static func matchRouteProgress(document: GPXDocument, latitude: Double, longitude: Double) -> RouteProgress? {
-        let points = document.points
-        guard !points.isEmpty else { return nil }
-        var bestIndex = 0
-        var bestDistance = Double.greatestFiniteMagnitude
-        for (index, point) in points.enumerated() {
-            let distance = haversineMeters(latitude, longitude, point.latitude, point.longitude)
-            if distance < bestDistance { bestDistance = distance; bestIndex = index }
-        }
-        let fraction = points.count == 1 ? 0 : Double(bestIndex) / Double(points.count - 1)
-        return RouteProgress(nearestPointIndex: bestIndex, distanceAlongRouteMeters: fraction * 1_000,
-                             distanceToRouteMeters: bestDistance, fractionComplete: fraction,
-                             estimatedElevationMeters: points[bestIndex].elevationMeters)
+        guard let route = try? GPXRoutePreprocessor().prepare(document) else { return nil }
+        let result = GPXRouteMatcher(route: route).match(RouteLocationInput(
+            coordinate: RouteCoordinate(latitude: latitude, longitude: longitude),
+            horizontalAccuracyMeters: 10,
+            timestamp: Date(),
+            speedMetersPerSecond: nil,
+            courseDegrees: nil,
+            altitudeMeters: nil,
+            cadenceStepsPerMinute: nil
+        ))
+        let nearestVertexIndex = route.vertices.indices.min {
+            abs(route.vertices[$0].cumulativeDistanceMeters - result.routeProgressMeters) <
+            abs(route.vertices[$1].cumulativeDistanceMeters - result.routeProgressMeters)
+        } ?? 0
+        return RouteProgress(
+            nearestPointIndex: route.vertices[nearestVertexIndex].sourcePointIndex,
+            distanceAlongRouteMeters: result.routeProgressMeters,
+            distanceToRouteMeters: result.distanceToRouteMeters,
+            fractionComplete: result.routeProgressMeters / max(route.totalDistanceMeters, 1),
+            estimatedElevationMeters: route.vertices[nearestVertexIndex].elevationMeters
+        )
     }
 
     static func evaluateFatigueRisk(status: TripStatus, plan: TripPlan, snapshot: HealthSnapshot? = nil) -> RiskEvaluation {
@@ -164,12 +173,6 @@ enum HikingRuleTools {
                               nextRouteAdjustment: "保持当前长度，单次只增加一个难度变量")
     }
 
-    private static func haversineMeters(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
-        let radians = Double.pi / 180
-        let a = sin((lat2 - lat1) * radians / 2) * sin((lat2 - lat1) * radians / 2)
-            + cos(lat1 * radians) * cos(lat2 * radians) * sin((lon2 - lon1) * radians / 2) * sin((lon2 - lon1) * radians / 2)
-        return 6_371_000 * 2 * atan2(sqrt(a), sqrt(1 - a))
-    }
 }
 
 private extension Double {

@@ -7,6 +7,7 @@ final class NotificationService: ObservableObject {
     @Published private(set) var authorizationGranted = false
     private var lastNotificationAt: Date?
     private var lastRisk: RiskLevel = .low
+    private var lastRouteDeviationNotificationAt: Date?
 
     func requestAuthorization() async -> Bool {
         do {
@@ -31,6 +32,23 @@ final class NotificationService: ObservableObject {
         content.body = action.detail
         content.sound = risk.level == .high ? .defaultCritical : .default
         let request = UNNotificationRequest(identifier: "wudax-risk-\(UUID().uuidString)", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func postRouteDeviationIfNeeded(_ result: RouteMatchResult, now: Date = Date()) {
+        guard authorizationGranted, result.isOffRoute else { return }
+        let cooledDown = lastRouteDeviationNotificationAt.map {
+            now.timeIntervalSince($0) >= 15 * 60
+        } ?? true
+        guard cooledDown else { return }
+        lastRouteDeviationNotificationAt = now
+
+        let content = UNMutableNotificationContent()
+        content.title = "WUDAX · 可能偏离计划路线"
+        content.body = "距计划路线约 \(Int(result.distanceToRouteMeters.rounded())) 米。请停下确认方向、明显路标和退路。"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "wudax-off-route-\(UUID().uuidString)",
+                                            content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 }
