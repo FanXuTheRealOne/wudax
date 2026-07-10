@@ -16,6 +16,7 @@ struct Route: Identifiable {
     var waterSourceCount: Int
     var qualityScore: Int = 100
     var sourcePurpose: RoutePurpose = .plannedRoute
+    var provenance: RouteProvenance? = nil
 
     struct RiskPoint: Identifiable {
         let id = UUID()
@@ -55,7 +56,8 @@ extension Route {
                   isOutAndBack: stats.isLoop,
                   waterSourceCount: analyzedGPX.document.waypoints.filter { $0.name?.localizedCaseInsensitiveContains("水") == true }.count,
                   qualityScore: analyzedGPX.qualityScore,
-                  sourcePurpose: analyzedGPX.document.purpose)
+                  sourcePurpose: analyzedGPX.document.purpose,
+                  provenance: RouteProvenance(analyzedGPX: analyzedGPX))
     }
 }
 

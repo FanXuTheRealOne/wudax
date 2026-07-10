@@ -31,9 +31,13 @@ struct GPXParser {
             $0.heartRateBPM != nil || $0.cadenceRPM != nil
         }
 
+        let recordedStartAt = delegate.metadataTime ?? delegate.segments.flatMap(\.points).compactMap(\.time).min()
+
         return GPXDocument(
             name: delegate.trackName ?? delegate.routeName ?? delegate.metadataName ?? "未命名路线",
             creator: delegate.creator,
+            author: delegate.authorName,
+            recordedStartAt: recordedStartAt,
             segments: delegate.segments,
             waypoints: delegate.waypoints,
             purpose: containsRecordedFields ? .recordedActivity : .plannedRoute,
@@ -46,6 +50,8 @@ struct GPXParser {
 private final class GPXParserDelegate: NSObject, XMLParserDelegate {
     var creator: String?
     var metadataName: String?
+    var authorName: String?
+    var metadataTime: Date?
     var trackName: String?
     var routeName: String?
     var segments: [GPXTrackSegment] = []
@@ -118,6 +124,7 @@ private final class GPXParserDelegate: NSObject, XMLParserDelegate {
             }
         case "time":
             if currentPoint != nil { currentPoint?.time = Self.parseDate(value) }
+            else if path.contains("metadata") { metadataTime = Self.parseDate(value) }
         case "speed":
             if currentPoint != nil { currentPoint?.speedMetersPerSecond = Self.parseNumber(value) }
         case "hr", "heartrate", "heart_rate", "heart-rate":
@@ -164,6 +171,8 @@ private final class GPXParserDelegate: NSObject, XMLParserDelegate {
         guard let name = value.trimmedNilIfEmpty else { return }
         if currentWaypoint != nil {
             currentWaypoint?.name = name
+        } else if path.contains("author") {
+            authorName = name
         } else if path.contains("trk") {
             trackName = name
         } else if path.contains("rte") {

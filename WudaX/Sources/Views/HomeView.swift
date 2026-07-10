@@ -1,51 +1,66 @@
 import SwiftUI
 
-// MARK: - 首页「行程」
+// MARK: - 「行程」Tab：开始规划 + 历史 GPX 记录 + WUDAX 助手
 
 struct HomeView: View {
     @EnvironmentObject var session: TripSession
-    @State private var showExo = ProcessInfo.processInfo.environment["WUDAX_PHASE"] == "exo"
+    @EnvironmentObject var library: RouteLibraryStore
     @State private var showChat = false
+    @State private var showAllRoutes = false
+    @State private var detailRecord: RouteRecord?
+    @State private var renaming: RouteRecord?
+    @State private var newName = ""
     @State private var appeared = false
+
+    private var recentRecords: [RouteRecord] { Array(library.records.prefix(4)) }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 header
-                routeCard
+                startPlanningRow
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 24)
-                fatigueSection
+                    .offset(y: appeared ? 0 : 20)
+                historySection
                 aiSection
-                gearSection
-                Spacer(minLength: 40)
+                Spacer(minLength: 96)
             }
             .padding(.horizontal, 22)
         }
         .background(alignment: .top) { mountainHeader }
-        .onAppear {
-            withAnimation(.spring(duration: 0.9).delay(0.15)) { appeared = true }
-        }
-        .sheet(isPresented: $showExo) { ExoShowcaseView() }
+        .onAppear { withAnimation(.spring(duration: 0.9).delay(0.1)) { appeared = true } }
         .sheet(isPresented: $showChat) { ChatView() }
+        .sheet(isPresented: $showAllRoutes) { AllRoutesView() }
+        .sheet(item: $detailRecord) { record in
+            RouteDetailView(record: record) {
+                detailRecord = nil
+                session.planRecord(record)
+            }
+        }
+        .alert("重命名路线", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("路线名称", text: $newName)
+            Button("取消", role: .cancel) { renaming = nil }
+            Button("保存") {
+                if let record = renaming, !newName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    library.rename(record, to: newName)
+                }
+                renaming = nil
+            }
+        }
     }
+
+    // MARK: 顶部山景 + Logo
 
     private var mountainHeader: some View {
         Group {
             if let ui = UIImage(named: "ink_mountains") {
                 Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 300)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-                    .mask(
-                        LinearGradient(
-                            stops: [.init(color: .black, location: 0),
-                                    .init(color: .black, location: 0.6),
-                                    .init(color: .clear, location: 1)],
-                            startPoint: .top, endPoint: .bottom)
-                    )
+                    .resizable().scaledToFill()
+                    .frame(height: 300).frame(maxWidth: .infinity).clipped()
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                                 .init(color: .black, location: 0.6),
+                                                 .init(color: .clear, location: 1)],
+                                         startPoint: .top, endPoint: .bottom))
                     .opacity(0.85)
             }
         }
@@ -53,181 +68,122 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 90) {
-            HStack {
-                if let logo = UIImage(named: "logo_white") {
-                    Image(uiImage: logo)
-                        .resizable().scaledToFit().frame(height: 26)
-                } else {
-                    Text("wudaX").font(WDFont.title(24)).foregroundStyle(WDColor.ricePaper)
-                }
-                Spacer()
-                Image(systemName: "person.circle")
-                    .font(.system(size: 24, weight: .light))
-                    .foregroundStyle(WDColor.ricePaper.opacity(0.8))
+        HStack {
+            if let logo = UIImage(named: "logo_white") {
+                Image(uiImage: logo).resizable().scaledToFit().frame(height: 26)
+            } else {
+                Text("wudaX").font(WDFont.title(24)).foregroundStyle(WDColor.ricePaper)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("行 程")
-                    .font(WDFont.title(34))
-                    .foregroundStyle(WDColor.ricePaper)
-                Rectangle()
-                    .fill(WDColor.amber)
-                    .frame(width: 44, height: 2.5)
-            }
+            Spacer()
+            Image(systemName: "person.circle")
+                .font(.system(size: 24, weight: .light)).foregroundStyle(WDColor.ricePaper.opacity(0.8))
         }
         .padding(.top, 6)
     }
 
-    private var routeCard: some View {
-        Button { session.startPlanning() } label: {
-            InkCard(light: true) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(session.plan.route.name)
-                        .font(WDFont.title(25))
-                        .foregroundStyle(WDColor.ink)
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                    Text("点击开始规划后，在流程中选择本次 GPX 路线")
-                        .font(WDFont.caption(11)).foregroundStyle(WDColor.ink.opacity(0.55))
+    // MARK: 行程标题 + 开始规划
 
-                    HStack(spacing: 0) {
-                        metric("location", "距离", "24.6", "km")
-                        divider
-                        metric("mountain.2", "累计爬升", "1780", "m")
-                        divider
-                        metric("clock", "预计耗时", "9h30", "m")
-                    }
+    private var startPlanningRow: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("行 程").font(WDFont.title(34)).foregroundStyle(WDColor.ricePaper)
+                Rectangle().fill(WDColor.amber).frame(width: 44, height: 2.5)
+            }
+            Spacer()
+            Button { session.startPlanning() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "figure.climbing").font(.system(size: 18, weight: .medium))
+                    Text("开始规划").font(WDFont.heading(16))
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(WDColor.ricePaper)
+                .padding(.horizontal, 18).padding(.vertical, 16)
+                .background(RoundedRectangle(cornerRadius: 16).fill(WDColor.deepMoss.opacity(0.92))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.amber.opacity(0.35), lineWidth: 1)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 74)
+    }
 
-                    HStack {
-                        Label("中高风险", systemImage: "exclamationmark.triangle.fill")
-                            .font(WDFont.body(13).weight(.medium))
-                            .foregroundStyle(WDColor.amber)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(WDColor.amber.opacity(0.6), lineWidth: 1)
-                            )
-                        Spacer()
-                        Text("开始规划")
-                            .font(WDFont.body(13).weight(.semibold))
-                            .foregroundStyle(WDColor.ricePaper)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(Capsule().fill(WDColor.ink))
-                    }
+    // MARK: 历史 GPX 记录
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("历史 GPX 记录", systemImage: "clock").font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
+                Spacer()
+                Button { showAllRoutes = true } label: {
+                    HStack(spacing: 3) {
+                        Text("查看全部").font(WDFont.caption())
+                        Image(systemName: "chevron.right").font(.system(size: 10))
+                    }.foregroundStyle(WDColor.mist)
+                }.buttonStyle(.plain)
+            }
+            if recentRecords.isEmpty {
+                emptyHistory
+            } else {
+                ForEach(recentRecords) { record in
+                    Button { detailRecord = record } label: { RouteRecordCard(record: record) }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button { detailRecord = record } label: { Label("查看详情", systemImage: "eye") }
+                            Button { renaming = record; newName = record.name } label: { Label("重命名", systemImage: "pencil") }
+                            Button(role: .destructive) { library.delete(record) } label: { Label("删除", systemImage: "trash") }
+                        }
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 
-    private var divider: some View {
-        Rectangle().fill(WDColor.ink.opacity(0.12)).frame(width: 1, height: 40)
-            .padding(.horizontal, 10)
-    }
-
-    private func metric(_ icon: String, _ label: String, _ value: String, _ unit: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(label, systemImage: icon)
-                .font(WDFont.caption(11))
-                .foregroundStyle(WDColor.ink.opacity(0.55))
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value).font(.system(size: 24, weight: .semibold, design: .serif))
-                Text(unit).font(WDFont.caption(11))
-            }
-            .foregroundStyle(WDColor.ink)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var fatigueSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("疲劳档案", systemImage: "doc.text")
-                    .font(WDFont.heading(17))
-                    .foregroundStyle(WDColor.ricePaper)
-                Spacer()
-                Text("已记录 \(session.profile.tripsRecorded) 次行程")
-                    .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-            }
-            HStack(spacing: 12) {
-                profileTile(icon: "figure.hiking",
-                            title: "下坡耐受",
-                            value: String(format: "%.1f km", session.profile.descentToleranceKm),
-                            note: "累计下降后膝痛出现")
-                profileTile(icon: "drop",
-                            title: "补给习惯",
-                            value: String(format: "%.2f L/h", session.profile.waterRatePerHour),
-                            note: "平均耗水速率")
-            }
-        }
-    }
-
-    private func profileTile(icon: String, title: String, value: String, note: String) -> some View {
+    private var emptyHistory: some View {
         InkCard {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(WDColor.bamboo)
-                Text(title).font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                Text(value).font(WDFont.mono(17)).foregroundStyle(WDColor.ricePaper)
-                Text(note).font(WDFont.caption(10)).foregroundStyle(WDColor.mist.opacity(0.7))
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.down").font(.system(size: 22, weight: .light)).foregroundStyle(WDColor.mist)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("还没有路线").font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                    Text("点「开始规划」导入一段 GPX 轨迹").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                }
+                Spacer()
             }
         }
     }
+
+    // MARK: WUDAX 助手
 
     private var aiSection: some View {
         Button { showChat = true } label: {
             InkCard {
                 HStack(spacing: 14) {
-                    Image(systemName: "bubble.left.fill")
-                        .font(.system(size: 24, weight: .light))
-                        .foregroundStyle(WDColor.amber)
-                        .frame(width: 54, height: 54)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("WUDAX 助手")
-                            .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                        Text("端侧离线小模型 · 随时问徒步的事")
-                            .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "bubble.left.fill")
+                                .font(.system(size: 20)).foregroundStyle(WDColor.amber)
+                                .frame(width: 44, height: 44)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("WUDAX 助手").font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                                Text("端侧离线小模型 · 随时问徒步的事").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                            }
+                            Spacer()
+                            Image(systemName: "waveform").font(.system(size: 20)).foregroundStyle(WDColor.amber)
+                        }
+                        HStack(spacing: 8) {
+                            chip("如何降低膝盖压力？")
+                            chip("高原徒步注意事项")
+                        }
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13)).foregroundStyle(WDColor.mist)
                 }
             }
         }
         .buttonStyle(.plain)
     }
 
-    private var gearSection: some View {
-        Button { showExo = true } label: {
-            InkCard {
-                HStack(spacing: 14) {
-                    Group {
-                        if let ui = UIImage(named: "exo_thumb") {
-                            Image(uiImage: ui).resizable().scaledToFit()
-                        } else {
-                            Image(systemName: "figure.walk.motion")
-                                .font(.system(size: 26, weight: .light))
-                                .foregroundStyle(WDColor.amber)
-                        }
-                    }
-                    .frame(width: 54, height: 54)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("WUDAX 膝关节外骨骼")
-                            .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                        Text("v2.0 数据接入预留 · 查看 3D 模型")
-                            .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13)).foregroundStyle(WDColor.mist)
-                }
-            }
-        }
-        .buttonStyle(.plain)
+    private func chip(_ text: String) -> some View {
+        Text(text)
+            .font(WDFont.caption(11)).foregroundStyle(WDColor.ricePaper.opacity(0.85))
+            .lineLimit(1)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Capsule().fill(WDColor.mossSurface))
     }
 }

@@ -52,9 +52,3 @@ final class NotificationService: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 }
-
-private extension RiskLevel {
-    var rank: Int {
-        switch self { case .low: 0; case .medium: 1; case .mediumHigh: 2; case .high: 3 }
-    }
-}

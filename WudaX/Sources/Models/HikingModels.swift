@@ -30,6 +30,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case name
         case creator
+        case author
+        case recordedStartAt
         case segments
         case waypoints
         case purpose
@@ -38,7 +40,12 @@ struct GPXDocument: Codable, Equatable, Sendable {
     }
 
     var name: String
+    /// 生成该文件的软件（如「两步路」），不是记录者本人。
     var creator: String?
+    /// 轨迹的原始记录者（GPX metadata/author/name），不是本 App 用户。可能缺失。
+    var author: String?
+    /// 原始记录的开始时间（metadata/time 或首个轨迹点时间）。
+    var recordedStartAt: Date?
     var segments: [GPXTrackSegment]
     var waypoints: [GPXWaypoint]
     var purpose: RoutePurpose
@@ -48,6 +55,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
     init(
         name: String,
         creator: String?,
+        author: String? = nil,
+        recordedStartAt: Date? = nil,
         segments: [GPXTrackSegment],
         waypoints: [GPXWaypoint],
         purpose: RoutePurpose,
@@ -56,6 +65,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
     ) {
         self.name = name
         self.creator = creator
+        self.author = author
+        self.recordedStartAt = recordedStartAt
         self.segments = segments
         self.waypoints = waypoints
         self.purpose = purpose
@@ -67,6 +78,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
         creator = try container.decodeIfPresent(String.self, forKey: .creator)
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+        recordedStartAt = try container.decodeIfPresent(Date.self, forKey: .recordedStartAt)
         segments = try container.decode([GPXTrackSegment].self, forKey: .segments)
         waypoints = try container.decode([GPXWaypoint].self, forKey: .waypoints)
         purpose = try container.decode(RoutePurpose.self, forKey: .purpose)
@@ -78,6 +91,8 @@ struct GPXDocument: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(creator, forKey: .creator)
+        try container.encodeIfPresent(author, forKey: .author)
+        try container.encodeIfPresent(recordedStartAt, forKey: .recordedStartAt)
         try container.encode(segments, forKey: .segments)
         try container.encode(waypoints, forKey: .waypoints)
         try container.encode(purpose, forKey: .purpose)
@@ -87,6 +102,7 @@ struct GPXDocument: Codable, Equatable, Sendable {
 
     var points: [GPXTrackPoint] { segments.flatMap(\.points) }
 
+    /// 剥离逐点遥测（时间/速度/心率/步频）用于路线匹配；但保留原作者身份与记录时间。
     func copyForPlanning() -> GPXDocument {
         var copy = self
         copy.purpose = .plannedRoute
