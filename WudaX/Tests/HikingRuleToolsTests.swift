@@ -21,6 +21,20 @@ final class HikingRuleToolsTests: XCTestCase {
         XCTAssertTrue(readiness.reasons.contains { $0.contains("疼痛") })
     }
 
+    func testReadinessAddsPersonalHealthCautions() {
+        let history = PersonalHealthProfile(injury: .knee,
+                                            surgery: .recovering,
+                                            surgeryLocation: .knee,
+                                            medicalConsideration: .medication)
+        let readiness = HikingRuleTools.calculateUserReadiness(snapshot: nil,
+                                                                subjective: ["sleepHours": 8, "fatigue": 0, "pain": 0],
+                                                                personalHealth: history)
+
+        XCTAssertLessThan(readiness.score, 70)
+        XCTAssertTrue(readiness.reasons.contains { $0.contains("膝") })
+        XCTAssertTrue(readiness.reasons.contains { $0.contains("手术") })
+    }
+
     func testControlledActionNeverInventsActionOutsideWhitelist() {
         var status = TripStatus()
         status.remainingWaterL = 0.2

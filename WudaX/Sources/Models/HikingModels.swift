@@ -128,6 +128,123 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
     func reading(_ metric: HealthMetric) -> HealthReading? { readings[metric] }
 }
 
+enum InjuryLocation: String, CaseIterable, Codable, Equatable, Sendable {
+    case none = "没有当前伤病"
+    case knee = "膝盖"
+    case ankleFoot = "脚踝 / 足部"
+    case hipBack = "髋部 / 腰背"
+    case shoulderArm = "肩部 / 手臂"
+    case multiple = "多个部位"
+    case other = "其他部位"
+}
+
+enum SurgeryHistory: String, CaseIterable, Codable, Equatable, Sendable {
+    case none = "没有做过手术"
+    case recovered = "做过，已完全恢复"
+    case recovering = "做过，仍在恢复或有限制"
+    case unknown = "做过，但不确定是否适合运动"
+}
+
+enum SurgeryLocation: String, CaseIterable, Codable, Equatable, Sendable {
+    case knee = "膝盖 / 下肢"
+    case ankleFoot = "脚踝 / 足部"
+    case hipBack = "髋部 / 腰背"
+    case shoulderArm = "肩部 / 手臂"
+    case abdomenChest = "胸部 / 腹部"
+    case other = "其他部位"
+}
+
+enum MedicalConsideration: String, CaseIterable, Codable, Equatable, Sendable {
+    case none = "没有需要特别注意的情况"
+    case chronicCondition = "有慢性病"
+    case medication = "需要携带个人药物"
+    case medicalRestriction = "有医生运动限制"
+}
+
+struct PersonalHealthProfile: Codable, Equatable, Sendable {
+    var injury: InjuryLocation?
+    var surgery: SurgeryHistory?
+    var surgeryLocation: SurgeryLocation?
+    var medicalConsideration: MedicalConsideration?
+
+    init(injury: InjuryLocation? = nil,
+         surgery: SurgeryHistory? = nil,
+         surgeryLocation: SurgeryLocation? = nil,
+         medicalConsideration: MedicalConsideration? = nil) {
+        self.injury = injury
+        self.surgery = surgery
+        self.surgeryLocation = surgeryLocation
+        self.medicalConsideration = medicalConsideration
+    }
+
+    var isComplete: Bool {
+        guard injury != nil, let surgery, medicalConsideration != nil else { return false }
+        return surgery == .none || surgeryLocation != nil
+    }
+
+    var readinessPenalty: Int {
+        let injuryPenalty: Int = injury.map { value in
+            switch value {
+            case .none: 0
+            case .knee: 10
+            case .multiple: 14
+            case .ankleFoot, .hipBack, .shoulderArm, .other: 8
+            }
+        } ?? 0
+        let surgeryPenalty: Int = surgery.map { value in
+            switch value {
+            case .none: 0
+            case .recovered: 2
+            case .recovering: 12
+            case .unknown: 8
+            }
+        } ?? 0
+        let medicalPenalty: Int = medicalConsideration.map { value in
+            switch value {
+            case .none: 0
+            case .chronicCondition: 8
+            case .medication: 4
+            case .medicalRestriction: 12
+            }
+        } ?? 0
+        return injuryPenalty + surgeryPenalty + medicalPenalty
+    }
+
+    var cautionReasons: [String] {
+        var reasons: [String] = []
+        if let injury {
+            switch injury {
+            case .none: break
+            case .knee: reasons.append("当前或近期有膝部伤病")
+            case .ankleFoot: reasons.append("当前或近期有脚踝/足部伤病")
+            case .hipBack: reasons.append("当前或近期有髋部/腰背伤病")
+            case .shoulderArm: reasons.append("当前或近期有肩部/手臂伤病")
+            case .multiple: reasons.append("当前或近期有多个部位伤病")
+            case .other: reasons.append("当前或近期有其他部位伤病")
+            }
+        }
+        if let surgery {
+            switch surgery {
+            case .recovering: reasons.append("有手术史且仍在恢复或存在活动限制")
+            case .unknown: reasons.append("有手术史但运动限制尚未确认")
+            case .none, .recovered: break
+            }
+            if surgery != .none, let surgeryLocation {
+                reasons.append("既往手术部位：\(surgeryLocation.rawValue)")
+            }
+        }
+        if let medicalConsideration {
+            switch medicalConsideration {
+            case .chronicCondition: reasons.append("有慢性病史，需要按个人医疗建议活动")
+            case .medication: reasons.append("需要携带个人药物")
+            case .medicalRestriction: reasons.append("存在医生给出的运动限制")
+            case .none: break
+            }
+        }
+        return reasons
+    }
+}
+
 struct ReadinessResult: Codable, Equatable, Sendable {
     var score: Int
     var label: String

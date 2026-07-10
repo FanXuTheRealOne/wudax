@@ -7,6 +7,9 @@ final class PlanningCoordinatorTests: XCTestCase {
         let coordinator = PlanningCoordinator()
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
         coordinator.importGPX(from: url)
+        coordinator.answerInjury(.none)
+        coordinator.answerSurgery(.none)
+        coordinator.answerMedicalConsideration(.none)
         coordinator.answerSleep(7)
         coordinator.answerFatigue(2)
         coordinator.answerPain(0)
@@ -32,5 +35,27 @@ final class PlanningCoordinatorTests: XCTestCase {
 
         XCTAssertNil(coordinator.importError)
         XCTAssertNotNil(coordinator.analyzedGPX)
+    }
+
+    @MainActor
+    func testPersonalHealthHistoryIsRequiredBeforeBuildingReport() throws {
+        let coordinator = PlanningCoordinator()
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
+        coordinator.importGPX(from: url)
+        coordinator.answerSleep(7)
+        coordinator.answerFatigue(2)
+        coordinator.answerPain(0)
+
+        XCTAssertFalse(coordinator.personalHealth.isComplete)
+        XCTAssertNil(coordinator.buildPlan(profile: FatigueProfile()))
+
+        coordinator.answerInjury(.knee)
+        coordinator.answerSurgery(.recovering)
+        coordinator.answerSurgeryLocation(.knee)
+        coordinator.answerMedicalConsideration(.medication)
+
+        XCTAssertTrue(coordinator.personalHealth.isComplete)
+        let result = try XCTUnwrap(coordinator.buildPlan(profile: FatigueProfile()))
+        XCTAssertTrue(result.readiness.reasons.contains { $0.contains("膝") || $0.contains("手术") })
     }
 }

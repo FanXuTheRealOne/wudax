@@ -12,10 +12,11 @@ struct PlanningChatView: View {
 
     private var current: PlanQuestion? { session.plan.missingQuestions.first }
     private var hasRoute: Bool { session.planning.analyzedGPX != nil }
+    private var personalHealthComplete: Bool { session.planning.personalHealth.isComplete }
     private var subjectiveComplete: Bool {
         ["sleepHours", "fatigue", "pain"].allSatisfy { session.planning.subjective[$0] != nil }
     }
-    private var canBuild: Bool { hasRoute && subjectiveComplete && session.plan.missingQuestions.isEmpty }
+    private var canBuild: Bool { personalHealthComplete && hasRoute && subjectiveComplete && session.plan.missingQuestions.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,9 +25,13 @@ struct PlanningChatView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     chatStream
                     healthCard
-                    routeCard
-                    if hasRoute { subjectiveCard }
-                    if hasRoute && subjectiveComplete { planQuestions }
+                    if personalHealthComplete {
+                        routeCard
+                        if hasRoute { subjectiveCard }
+                        if hasRoute && subjectiveComplete { planQuestions }
+                    } else {
+                        personalHealthCard
+                    }
                     if canBuild {
                         PillButton(title: "生成行前报告") { session.finalizePlanning() }
                             .padding(.top, 4)
@@ -142,6 +147,51 @@ struct PlanningChatView: View {
                 }
                 if let error = session.planning.importError {
                     Text(error).font(WDFont.caption()).foregroundStyle(WDColor.cinnabar)
+                }
+            }
+        }
+    }
+
+    private var personalHealthCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Label("个人健康情况", systemImage: "figure.hiking")
+                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    Text("必填").font(WDFont.caption()).foregroundStyle(WDColor.amber)
+                }
+                Text("这些回答只用于本次路线的保守风险提示，不替代医生诊断；如果不确定，请选“不确定”或先咨询医生。")
+                    .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+
+                if session.planning.personalHealth.injury == nil {
+                    Text("当前或近期哪里有伤病？")
+                        .font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                    FlowChips(options: InjuryLocation.allCases.map(\.rawValue)) { option in
+                        guard let value = InjuryLocation(rawValue: option) else { return }
+                        session.planning.answerInjury(value)
+                    }
+                } else if session.planning.personalHealth.surgery == nil {
+                    Text("以前做过手术吗？恢复情况如何？")
+                        .font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                    FlowChips(options: SurgeryHistory.allCases.map(\.rawValue)) { option in
+                        guard let value = SurgeryHistory(rawValue: option) else { return }
+                        session.planning.answerSurgery(value)
+                    }
+                } else if session.planning.personalHealth.surgery != .none && session.planning.personalHealth.surgeryLocation == nil {
+                    Text("手术涉及哪个部位？")
+                        .font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                    FlowChips(options: SurgeryLocation.allCases.map(\.rawValue)) { option in
+                        guard let value = SurgeryLocation(rawValue: option) else { return }
+                        session.planning.answerSurgeryLocation(value)
+                    }
+                } else if session.planning.personalHealth.medicalConsideration == nil {
+                    Text("还有需要特别注意的健康情况吗？")
+                        .font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                    FlowChips(options: MedicalConsideration.allCases.map(\.rawValue)) { option in
+                        guard let value = MedicalConsideration(rawValue: option) else { return }
+                        session.planning.answerMedicalConsideration(value)
+                    }
                 }
             }
         }

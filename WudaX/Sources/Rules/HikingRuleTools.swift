@@ -24,7 +24,9 @@ enum HikingRuleTools {
                                estimatedHours: route.estimatedHours)
     }
 
-    static func calculateUserReadiness(snapshot: HealthSnapshot?, subjective: [String: Double]) -> ReadinessResult {
+    static func calculateUserReadiness(snapshot: HealthSnapshot?,
+                                       subjective: [String: Double],
+                                       personalHealth: PersonalHealthProfile? = nil) -> ReadinessResult {
         var score = 70
         var reasons: [String] = []
         var missing: [String] = []
@@ -50,6 +52,11 @@ enum HikingRuleTools {
            restingHeartRate - baseline >= 8 {
             score -= 12
             reasons.append("静息心率高于个人基线")
+        }
+
+        if let personalHealth, personalHealth.isComplete {
+            score -= personalHealth.readinessPenalty
+            reasons.append(contentsOf: personalHealth.cautionReasons)
         }
 
         score = min(max(score, 0), 100)
