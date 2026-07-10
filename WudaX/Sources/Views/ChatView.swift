@@ -48,22 +48,11 @@ struct ChatView: View {
 
     @ViewBuilder private var statusBanner: some View {
         switch llm.loadState {
-        case .downloading(let p):
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    ProgressView().tint(WDColor.amber).scaleEffect(0.8)
-                    Text(p > 0 ? "首次下载模型 \(Int(p * 100))%" : "准备下载模型（约 335MB）…")
-                        .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                    Spacer()
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(WDColor.mossSurface).frame(height: 4)
-                        Capsule().fill(WDColor.amber)
-                            .frame(width: geo.size.width * max(p, 0.02), height: 4)
-                    }
-                }
-                .frame(height: 4)
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView().tint(WDColor.amber).scaleEffect(0.8)
+                Text("正在载入本地模型…").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                Spacer()
             }
             .padding(.horizontal, 22).padding(.bottom, 10)
         case .failed(let msg):
