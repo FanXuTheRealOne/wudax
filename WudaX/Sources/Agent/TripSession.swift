@@ -28,6 +28,8 @@ final class TripSession: ObservableObject {
     let offlineResources = OfflineResourceManager()
     let notifications = NotificationService()
     let tripStore = TripStore()
+    /// 本地路线库(历史 GPX 记录),由 App 注入。
+    var library: RouteLibraryStore?
     @Published var events: [TripEvent] = []
     @Published var latestHealthSnapshot: HealthSnapshot?
     @Published private(set) var preparedRoute: PreparedGPXRoute?
@@ -50,6 +52,8 @@ final class TripSession: ObservableObject {
     private var lastOffRouteEventAt: Date?
     private var routeMatcher: GPXRouteMatcher?
     private var lastRouteLocationAt: Date?
+    /// 当前规划来源于哪条已存记录(为空表示是新导入,完成后入库)。
+    private var planningSourceRecordID: UUID?
 
     init() {
         location.onLocationUpdate = { [weak self] location in
@@ -119,6 +123,21 @@ final class TripSession: ObservableObject {
         routeMatcher = nil
         routeMatch = nil
         lastRouteLocationAt = nil
+        planningSourceRecordID = nil
+        phase = .planningChat
+    }
+
+    /// 从历史路线库里选一条已存记录进入规划(路线已载入,无需重新导入)。
+    func planRecord(_ record: RouteRecord) {
+        plan = SampleData.plan
+        planning.reset()
+        planningResult = nil
+        preparedRoute = nil
+        routeMatcher = nil
+        routeMatch = nil
+        lastRouteLocationAt = nil
+        planningSourceRecordID = record.id
+        planning.loadForPlanning(record)
         phase = .planningChat
     }
 
@@ -142,6 +161,10 @@ final class TripSession: ObservableObject {
             routeMatcher = GPXRouteMatcher(route: prepared)
             offlineResources.prepare(analyzedGPX: analyzed, preparedRoute: prepared,
                                      originalGPXData: planning.importedGPXData)
+        }
+        // 新导入的路线完成规划后写入本地库(从已存记录进入的不重复入库)。
+        if planningSourceRecordID == nil, let analyzed = planning.analyzedGPX {
+            library?.upsert(RouteRecord(analyzedGPX: analyzed, createdAt: Date()))
         }
         phase = .budgetCard
     }
@@ -380,11 +403,5 @@ enum Haptics {
         #if os(iOS)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
-    }
-}
-
-private extension RiskLevel {
-    var rank: Int {
-        switch self { case .low: 0; case .medium: 1; case .mediumHigh: 2; case .high: 3 }
     }
 }

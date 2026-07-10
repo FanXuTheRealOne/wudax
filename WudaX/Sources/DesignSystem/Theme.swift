@@ -69,6 +69,15 @@ enum RiskLevel: String, CaseIterable, Codable {
         case .high: return WDColor.cinnabar
         }
     }
+
+    var rank: Int {
+        switch self {
+        case .low: return 0
+        case .medium: return 1
+        case .mediumHigh: return 2
+        case .high: return 3
+        }
+    }
 }
 
 // MARK: - Agent 结论

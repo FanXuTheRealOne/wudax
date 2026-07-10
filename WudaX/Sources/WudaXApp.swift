@@ -3,12 +3,15 @@ import SwiftUI
 @main
 struct WudaXApp: App {
     @StateObject private var session = TripSession()
+    @StateObject private var library = RouteLibraryStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(library)
                 .preferredColorScheme(.dark)
+                .onAppear { session.library = library }
         }
     }
 }
@@ -23,7 +26,7 @@ struct RootView: View {
 
             switch session.phase {
             case .home:
-                HomeView()
+                RootTabView()
                     .transition(.opacity)
             case .planningChat:
                 PlanningChatView()

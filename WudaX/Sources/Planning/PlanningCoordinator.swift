@@ -87,8 +87,15 @@ final class PlanningCoordinator: ObservableObject {
         return state
     }
 
-    func importGPX(from url: URL) {
-        do {
+    /// 从历史记录预载路线,规划时无需再次导入 GPX 文件。
+    func loadForPlanning(_ record: RouteRecord) {
+        let analyzed = record.analyzed()
+        analyzedGPX = analyzed
+        importedGPXData = try? JSONEncoder().encode(record.document)
+        importError = nil
+    }
+
+    func importGPX(from url: URL) {        do {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             let data = try Data(contentsOf: url)
@@ -131,7 +138,11 @@ final class PlanningCoordinator: ObservableObject {
         personalHealth.medicalConsideration = value
         addUser("需要特别注意的情况：\(value.rawValue)")
         if !wasComplete && personalHealth.isComplete {
-            addAssistant("个人健康情况已记录。现在请导入本次路线 GPX，我会检查轨迹、海拔、时间间隔和异常点。", card: .route)
+            if let analyzedGPX {
+                addAssistant("已载入路线：\(analyzedGPX.document.name)（原作者 \(analyzedGPX.document.author ?? "未署名")）。最后几个只和今天有关的问题：最近睡眠、主观疲劳和疼痛。", card: .questionnaire)
+            } else {
+                addAssistant("个人健康情况已记录。现在请导入本次路线 GPX，我会检查轨迹、海拔、时间间隔和异常点。", card: .route)
+            }
         }
     }
 

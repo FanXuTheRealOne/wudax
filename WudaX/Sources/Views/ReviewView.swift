@@ -169,12 +169,6 @@ struct ReviewView: View {
     }
 }
 
-private extension RiskLevel {
-    var rank: Int {
-        switch self { case .low: 0; case .medium: 1; case .mediumHigh: 2; case .high: 3 }
-    }
-}
-
 extension WDColor {
     static let bambooText = bamboo
 }
