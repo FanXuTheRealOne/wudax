@@ -1,0 +1,26 @@
+name: WudaX
+options:
+  bundleIdPrefix: com.wudax
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: MGJM75MGDG
+targets:
+  WudaX:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wudax.app
+        INFOPLIST_KEY_CFBundleDisplayName: WUDAX
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        GENERATE_INFOPLIST_FILE: YES
