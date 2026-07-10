@@ -36,6 +36,14 @@ WUDAX 在 iPhone 上完成一次徒步的三阶段闭环：行前理解用户与
 - GPX 原文件保存在 Application Support，SwiftData 只保存索引、摘要和报告；禁止把用户提供的原始 GPX 提交到 Git。
 - Apple Watch 与 BLE 仅预留协议。本版本的 iPhone HealthKit 心率不是高频实时心率，界面必须如实表达。
 
+## 后端边界与已实现能力
+
+以下能力不需要后端，已经在 App 内实现：GPX 文件选择和容错解析、路线/海拔质量分析、Core Location 实时定位、GPX 轨迹叠加、轨迹记录、HealthKit observer、确定性风险规则、本地 Qwen3 工具调用、系统本地通知、行程和报告本地持久化。
+
+“完整离线地图”需要额外的地图瓦片/矢量包授权、区域裁剪、版本签名、下载校验和资源更新策略。当前产品明确使用“仅路线离线模式”：GPX 线、海拔、当前位置和进度不依赖网络；MapKit 底图如果没有系统缓存可能为空，不把它伪装成完整离线底图。若产品要交付完整底图，需要接入 MapLibre/合法瓦片供应商或自有离线包分发服务，这属于地图资源供应链，不是徒步 Agent 后端 API。
+
+主动式 AI 也不依赖后端：位置样本、HealthKit 新样本、前台 30 秒节流和用户状态确认都会进入同一套 Swift 风险编排，规则决定风险和行动，端侧模型只补充解释。iOS 被终止后的执行仍受系统后台定位、HealthKit observer 和通知策略约束，不能承诺任意间隔唤醒。
+
 ## 规则工具与模型边界
 
 确定性工具：`analyze_gpx`、`calculate_route_load`、`calculate_user_readiness`、`calculate_challenge_gap`、`calculate_supply_budget`、`build_equipment_checklist`、`match_route_progress`、`evaluate_fatigue_risk`、`select_controlled_action`、`summarize_trip`、`update_personal_baseline`、`build_training_advice`。
@@ -70,4 +78,3 @@ MapLibre 离线资源以 GPX 走廊区域管理，展示下载进度、大小、
 5. 行中定位与事件驱动风险评估可工作，通知有升级/冷却策略。
 6. 行后生成复盘、基线更新和训练建议。
 7. 界面只复用现有配色和组件，顶部没有白条。
-
