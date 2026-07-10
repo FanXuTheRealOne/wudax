@@ -14,12 +14,48 @@ struct Route: Identifiable {
     var hasUnverifiedSegment: Bool     // 无路 / 探路段
     var isOutAndBack: Bool             // 原路返回
     var waterSourceCount: Int
+    var qualityScore: Int = 100
+    var sourcePurpose: RoutePurpose = .plannedRoute
 
     struct RiskPoint: Identifiable {
         let id = UUID()
         var profileIndex: Int          // 在剖面图中的位置
         var title: String
         var detail: String
+    }
+}
+
+extension Route {
+    init(analyzedGPX: AnalyzedGPX) {
+        let points = analyzedGPX.document.points
+        let elevations = points.compactMap(\.elevationMeters)
+        let profile: [Double] = {
+            guard !elevations.isEmpty else { return [] }
+            let count = min(48, max(2, elevations.count))
+            return (0..<count).map { index in
+                let source = Int(Double(index) / Double(count - 1) * Double(elevations.count - 1))
+                return elevations[source]
+            }
+        }()
+        let stats = analyzedGPX.statistics
+        let hours = max(0.5, stats.distanceMeters / 1000 / 3.5 + stats.ascentMeters / 600)
+        let riskIndex = profile.indices.max { profile[$0] < profile[$1] } ?? 0
+        let descentStart = profile.indices.dropFirst().first(where: { profile[$0] < profile[$0 - 1] && $0 > riskIndex }) ?? max(0, profile.count - 4)
+        self.init(name: analyzedGPX.document.name,
+                  distanceKm: stats.distanceMeters / 1000,
+                  ascentM: stats.ascentMeters,
+                  descentM: stats.descentMeters,
+                  estimatedHours: hours,
+                  elevationProfile: profile,
+                  riskPoints: [
+                    .init(profileIndex: riskIndex, title: "最高点", detail: "路线最高海拔附近，注意风和体温"),
+                    .init(profileIndex: descentStart, title: "下降段起点", detail: "提前确认膝盖、补水和时间余量")
+                  ],
+                  hasUnverifiedSegment: analyzedGPX.qualityScore < 70,
+                  isOutAndBack: stats.isLoop,
+                  waterSourceCount: analyzedGPX.document.waypoints.filter { $0.name?.localizedCaseInsensitiveContains("水") == true }.count,
+                  qualityScore: analyzedGPX.qualityScore,
+                  sourcePurpose: analyzedGPX.document.purpose)
     }
 }
 
@@ -36,6 +72,11 @@ struct TripPlan {
     var suggestedFoodKcal: Double = 1600
     var checkpoints: [String] = []
     var sunsetTime: Date?
+    var readinessScore: Int = 70
+    var readinessLabel: String = "基本可行"
+    var challengeGapLabel: String = "在能力范围"
+    var routeQualityScore: Int = 100
+    var equipment: [EquipmentItem] = []
 
     var missingQuestions: [PlanQuestion] {
         var qs: [PlanQuestion] = []

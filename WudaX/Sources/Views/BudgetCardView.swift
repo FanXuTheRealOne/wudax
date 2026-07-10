@@ -12,9 +12,11 @@ struct BudgetCardView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     riskHeader
+                    readinessCard
                     profileCard
                     risksCard
                     suppliesCard
+                    equipmentCard
                     checkpointsCard
                     Spacer(minLength: 8)
                     PillButton(title: "确认并开始准备") { session.confirmBudget() }
@@ -83,6 +85,24 @@ struct BudgetCardView: View {
         }
     }
 
+    private var readinessCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack {
+                    Label("今日准备度", systemImage: "waveform.path.ecg")
+                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    Text("\(session.plan.readinessScore) · \(session.plan.readinessLabel)")
+                        .font(WDFont.mono(13)).foregroundStyle(session.plan.readinessScore >= 60 ? WDColor.bamboo : WDColor.amber)
+                }
+                Text("路线挑战差距：\(session.plan.challengeGapLabel) · GPX 质量：\(session.plan.routeQualityScore)/100")
+                    .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                Text("分数只来自已提供的数据；缺失 HealthKit 样本不会被当作正常。")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist.opacity(0.8))
+            }
+        }
+    }
+
     private var risksCard: some View {
         InkCard {
             VStack(alignment: .leading, spacing: 14) {
@@ -117,6 +137,26 @@ struct BudgetCardView: View {
                 if let w = session.plan.waterL, w < session.plan.suggestedWaterL {
                     Text("你计划携带 \(String(format: "%.1f", w)) L，低于建议下限，出发前会再次确认。")
                         .font(WDFont.caption()).foregroundStyle(WDColor.amber)
+                }
+            }
+        }
+    }
+
+    private var equipmentCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("装备清单", systemImage: "backpack")
+                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                ForEach(session.plan.equipment) { item in
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: item.required ? "checkmark.circle" : "circle")
+                            .font(.system(size: 14)).foregroundStyle(item.required ? WDColor.bamboo : WDColor.mist)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title).font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
+                            Text(item.reason).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                        }
+                        Spacer()
+                    }
                 }
             }
         }

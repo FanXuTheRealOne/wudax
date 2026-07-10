@@ -94,3 +94,125 @@ struct AnalyzedGPX: Codable, Equatable, Sendable {
     }
 }
 
+enum DataFreshness: String, Codable, Equatable, Sendable {
+    case current
+    case recent
+    case stale
+    case unavailable
+}
+
+struct HealthReading: Codable, Equatable, Sendable {
+    var value: Double
+    var unit: String
+    var sampledAt: Date
+    var sourceName: String?
+    var freshness: DataFreshness
+}
+
+enum HealthMetric: String, CaseIterable, Codable, Sendable {
+    case age, sex, height, weight, bmi, bodyFat, leanBodyMass
+    case workouts, routes, steps, walkingRunningDistance, flightsClimbed
+    case activeEnergy, exerciseTime
+    case heartRate, restingHeartRate, walkingHeartRateAverage
+    case heartRateVariability, oxygenSaturation, respiratoryRate, vo2Max
+    case sleepDuration, walkingAsymmetry, walkingDoubleSupport, walkingSpeed
+    case sixMinuteWalkDistance
+}
+
+struct HealthSnapshot: Codable, Equatable, Sendable {
+    var capturedAt: Date
+    var readings: [HealthMetric: HealthReading]
+    var unavailableMetrics: Set<HealthMetric>
+    var authorizationGranted: Bool
+
+    func reading(_ metric: HealthMetric) -> HealthReading? { readings[metric] }
+}
+
+struct ReadinessResult: Codable, Equatable, Sendable {
+    var score: Int
+    var label: String
+    var reasons: [String]
+    var missingInputs: [String]
+}
+
+struct RouteLoadResult: Codable, Equatable, Sendable {
+    var score: Int
+    var label: String
+    var reasons: [String]
+    var distanceKm: Double
+    var ascentMeters: Double
+    var descentMeters: Double
+    var estimatedHours: Double
+}
+
+struct ChallengeGapResult: Codable, Equatable, Sendable {
+    var score: Int
+    var label: String
+    var reasons: [String]
+    var distanceGapKm: Double
+    var ascentGapMeters: Double
+    var descentGapKm: Double
+}
+
+struct SupplyBudgetResult: Codable, Equatable, Sendable {
+    var waterLiters: Double
+    var foodKilocalories: Double
+    var waterRatePerHour: Double
+    var feedingRatePerHour: Double
+    var explanation: String
+}
+
+struct EquipmentItem: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var title: String
+    var reason: String
+    var required: Bool
+}
+
+struct RiskEvaluation: Codable, Equatable, Sendable {
+    var level: RiskLevel
+    var reasons: [String]
+    var confidence: Double
+    var staleData: Bool
+}
+
+enum ControlledAction: String, Codable, CaseIterable, Sendable {
+    case continueRoute = "按计划继续"
+    case rest = "原地休息 10 分钟"
+    case hydrate = "补水并补充电解质"
+    case slowDown = "降低速度"
+    case shortenRoute = "缩短路线"
+    case turnBack = "从当前节点折返"
+    case checkSafety = "检查安全并联系同伴"
+}
+
+struct ActionRecommendation: Codable, Equatable, Sendable {
+    var action: ControlledAction
+    var title: String
+    var detail: String
+    var urgency: RiskLevel
+}
+
+struct RouteProgress: Codable, Equatable, Sendable {
+    var nearestPointIndex: Int
+    var distanceAlongRouteMeters: Double
+    var distanceToRouteMeters: Double
+    var fractionComplete: Double
+    var estimatedElevationMeters: Double?
+}
+
+struct TripSummary: Codable, Equatable, Sendable {
+    var plannedDistanceKm: Double
+    var actualDistanceKm: Double
+    var plannedHours: Double
+    var actualHours: Double
+    var planDeltaMinutes: Int
+    var peakRisk: RiskLevel
+    var keyEvents: [String]
+}
+
+struct TrainingAdvice: Codable, Equatable, Sendable {
+    var headline: String
+    var sessions: [String]
+    var nextRouteAdjustment: String
+}
