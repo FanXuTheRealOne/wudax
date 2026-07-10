@@ -16,6 +16,10 @@ settings:
     INFOPLIST_KEY_UIUserInterfaceStyle: Dark
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: MGJM75MGDG
+    INFOPLIST_KEY_NSHealthShareUsageDescription: "WUDAX 读取徒步准备相关的健康数据，用于离线疲劳评估。"
+    INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "WUDAX 使用定位匹配路线进度并在行中进行安全评估。"
+    INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "WUDAX 在你主动开始行程后继续记录路线进度和安全事件。"
+    INFOPLIST_KEY_NSUserNotificationsUsageDescription: "WUDAX 只在风险升级或冷却期结束时提醒你确认状态。"
 targets:
   WudaX:
     type: application
@@ -36,6 +40,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: WudaX.entitlements
   WudaXTests:
     type: bundle.unit-test
     platform: iOS

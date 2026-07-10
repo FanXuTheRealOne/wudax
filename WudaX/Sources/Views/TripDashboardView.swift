@@ -13,6 +13,8 @@ struct TripDashboardView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         progressCard
                         if let d = session.lastDecision { verdictCard(d) }
+                        resourceCard
+                        if !session.events.isEmpty { eventCard }
                         watchPreview
                         GhostButton(title: "结束行程", color: WDColor.mist) {
                             session.endTrip(retreated: false)
@@ -43,7 +45,7 @@ struct TripDashboardView: View {
                 Text("行程进行中")
                     .font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
                 Spacer()
-                Text("日落 19:12")
+                Text("距日落 \(String(format: "%.1f", session.status.hoursToSunset)) h")
                     .font(WDFont.mono(13)).foregroundStyle(
                         session.status.hoursToSunset < 3 ? WDColor.amber : WDColor.mist)
             }
@@ -92,6 +94,41 @@ struct TripDashboardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
+            }
+        }
+    }
+
+    private var resourceCard: some View {
+        InkCard {
+            HStack(spacing: 10) {
+                Image(systemName: session.location.isMonitoring ? "location.fill" : "location.slash")
+                    .foregroundStyle(session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.offlineResources.status.mode.rawValue)
+                        .font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
+                    Text(session.location.isMonitoring ? "定位持续记录，前台规则最多每 30 秒重算" : "定位未持续更新；状态判断会降低可信度")
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private var eventCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("主动事件", systemImage: "bell.badge")
+                    .font(WDFont.heading(15)).foregroundStyle(WDColor.amber)
+                ForEach(session.events.suffix(3)) { event in
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle().fill(event.risk.color).frame(width: 7, height: 7).padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(event.title).font(WDFont.body(13.5)).foregroundStyle(WDColor.ricePaper)
+                            Text(event.detail).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                        }
+                        Spacer()
+                    }
+                }
             }
         }
     }
