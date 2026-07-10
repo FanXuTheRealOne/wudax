@@ -39,6 +39,17 @@ final class PlanningCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testRouteImportRemainsAvailableBeforePersonalHealthHistoryIsComplete() throws {
+        let coordinator = PlanningCoordinator()
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
+
+        coordinator.importGPX(from: url)
+
+        XCTAssertFalse(coordinator.personalHealth.isComplete)
+        XCTAssertTrue(coordinator.canImportGPX)
+    }
+
+    @MainActor
     func testPersonalHealthHistoryIsRequiredBeforeBuildingReport() throws {
         let coordinator = PlanningCoordinator()
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
