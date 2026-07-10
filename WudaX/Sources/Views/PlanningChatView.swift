@@ -25,12 +25,15 @@ struct PlanningChatView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     chatStream
                     healthCard
-                    if personalHealthComplete {
-                        routeCard
-                        if hasRoute { subjectiveCard }
-                        if hasRoute && subjectiveComplete { planQuestions }
-                    } else {
+                    if !personalHealthComplete {
                         personalHealthCard
+                    }
+                    if session.planning.canImportGPX {
+                        routeCard
+                    }
+                    if personalHealthComplete && hasRoute {
+                        subjectiveCard
+                        if subjectiveComplete { planQuestions }
                     }
                     if canBuild {
                         PillButton(title: "生成行前报告") { session.finalizePlanning() }
@@ -42,12 +45,13 @@ struct PlanningChatView: View {
             }
         }
         .task { await session.planning.begin() }
-        .sheet(isPresented: $showImporter) {
-            GPXDocumentPicker { url in
-                showImporter = false
-                session.planning.importGPX(from: url)
-            }
-            .ignoresSafeArea()
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml, .xml],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            session.planning.importGPX(from: url)
         }
         .onAppear { withAnimation(.spring(duration: 0.7).delay(0.3)) { showCurrent = true } }
     }
@@ -145,6 +149,8 @@ struct PlanningChatView: View {
                 GhostButton(title: hasRoute ? "重新导入 GPX" : "选择 GPX 文件", color: WDColor.ricePaper.opacity(0.85)) {
                     showImporter = true
                 }
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("gpx-import-button")
                 if let error = session.planning.importError {
                     Text(error).font(WDFont.caption()).foregroundStyle(WDColor.cinnabar)
                 }
@@ -295,36 +301,6 @@ struct PlanningChatView: View {
     private func healthValue(_ metric: HealthMetric, suffix: String) -> String {
         guard let value = session.planning.healthSnapshot?.reading(metric)?.value else { return "—" }
         return "\(String(format: "%.1f", value))\(suffix)"
-    }
-}
-
-/// A native document picker is used instead of filtering through a dynamic UTI.
-/// This keeps GPX files stored in iCloud Drive or third-party file providers
-/// selectable and returns a local copy that can be parsed immediately.
-private struct GPXDocumentPicker: UIViewControllerRepresentable {
-    let onPick: (URL) -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let gpxType = UTType(filenameExtension: "gpx") ?? .xml
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [gpxType, .xml, .data], asCopy: true)
-        picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
-
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onPick: (URL) -> Void
-
-        init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
-
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-            onPick(url)
-        }
     }
 }
 

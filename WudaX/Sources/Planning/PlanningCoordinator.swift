@@ -34,6 +34,17 @@ final class PlanningCoordinator: ObservableObject {
     @Published var subjective: [String: Double] = [:]
     @Published var personalHealth = PersonalHealthProfile()
 
+    /// Route import is a Stage 1 action and stays available while the health
+    /// history card is still collecting answers.
+    var canImportGPX: Bool {
+        switch stage {
+        case .requestingHealth, .collecting, .routeImported, .ready:
+            return true
+        case .idle, .requestingHealth:
+            return false
+        }
+    }
+
     let healthKit = HealthKitService()
     private let parser = GPXParser()
     private let analyzer = GPXAnalyzer()
