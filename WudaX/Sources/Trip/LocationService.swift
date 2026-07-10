@@ -35,11 +35,23 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
     func startMonitoring() {
         requestPermission()
         guard manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways else { return }
-        manager.allowsBackgroundLocationUpdates = manager.authorizationStatus == .authorizedAlways
+        let hasBackgroundLocationMode = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
+        let canUseBackgroundLocation = Self.shouldEnableBackgroundLocationUpdates(
+            authorizationStatus: manager.authorizationStatus,
+            hasBackgroundLocationMode: hasBackgroundLocationMode?.contains("location") == true
+        )
+        manager.allowsBackgroundLocationUpdates = canUseBackgroundLocation
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
         isMonitoring = true
+    }
+
+    nonisolated static func shouldEnableBackgroundLocationUpdates(
+        authorizationStatus: CLAuthorizationStatus,
+        hasBackgroundLocationMode: Bool
+    ) -> Bool {
+        authorizationStatus == .authorizedAlways && hasBackgroundLocationMode
     }
 
     func stopMonitoring() {
