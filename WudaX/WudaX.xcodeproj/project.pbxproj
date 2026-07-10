@@ -27,6 +27,7 @@
 		6351BADA355F23FEB572EF87 /* HikingRuleTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608BDE009B5AB47516158723 /* HikingRuleTools.swift */; };
 		6379786036A87BA4EF2B8E09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 77841FBD00C8403C9AE8D748 /* Assets.xcassets */; };
 		699C86396AA781053F48E538 /* PlanningCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A46B8ABB0BAB332D2A39E7 /* PlanningCoordinator.swift */; };
+		69B5A7E05E9D810742D9A8A1 /* PlanningCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615FD2E85E5AC473B0DDA23F /* PlanningCoordinatorTests.swift */; };
 		7165DC8C516768855E07E3EF /* HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A98B1CF15560E467B0126 /* HealthKitService.swift */; };
 		75E27014A2A1389F7C278965 /* HikingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96700C0630A7BDD8104AB321 /* HikingModels.swift */; };
 		77B1EF0612C2AB69D0958E0D /* sanitized-route.gpx in Resources */ = {isa = PBXBuildFile; fileRef = 05B143C37AC125F4221F8D80 /* sanitized-route.gpx */; };
@@ -80,6 +81,7 @@
 		5E27D044AEB90DF868D73C42 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		60326BAA19C687933ED662A1 /* AgentToolOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentToolOrchestrator.swift; sourceTree = "<group>"; };
 		608BDE009B5AB47516158723 /* HikingRuleTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HikingRuleTools.swift; sourceTree = "<group>"; };
+		615FD2E85E5AC473B0DDA23F /* PlanningCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningCoordinatorTests.swift; sourceTree = "<group>"; };
 		65576A53A4EB3E4062908411 /* BudgetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetCardView.swift; sourceTree = "<group>"; };
 		656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningChatView.swift; sourceTree = "<group>"; };
 		65C147153596622A27B0AFEC /* GatekeeperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatekeeperView.swift; sourceTree = "<group>"; };
@@ -303,6 +305,7 @@
 				A40D9EE71EBECF7B26D6280D /* AgentToolOrchestratorTests.swift */,
 				8834CE3DB757CB28AF99C52A /* GPXParserTests.swift */,
 				3EDD0FD76EAE8DBD31BB1DEF /* HikingRuleToolsTests.swift */,
+				615FD2E85E5AC473B0DDA23F /* PlanningCoordinatorTests.swift */,
 				C21142AA64056E3C050E4A1F /* TripStoreTests.swift */,
 				765D642CF7D61EFB09E2A38D /* TripTrackRecorderTests.swift */,
 				E1367CD01744A0409F87BA20 /* Fixtures */,
@@ -483,6 +486,7 @@
 				9EB6C6869A7E3B404A46D13B /* AgentToolOrchestratorTests.swift in Sources */,
 				2F77656E0F9BE1717C917097 /* GPXParserTests.swift in Sources */,
 				BE9F63D85A9A829DE658B7FB /* HikingRuleToolsTests.swift in Sources */,
+				69B5A7E05E9D810742D9A8A1 /* PlanningCoordinatorTests.swift in Sources */,
 				C78F00F178031A4ED05E181A /* TripStoreTests.swift in Sources */,
 				E479AA195D3477DDE924DBE3 /* TripTrackRecorderTests.swift in Sources */,
 			);
