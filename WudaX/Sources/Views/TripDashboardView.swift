@@ -12,6 +12,7 @@ struct TripDashboardView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
                         progressCard
+                        routePositionCard
                         if let d = session.lastDecision { verdictCard(d) }
                         watchPreview
                         GhostButton(title: "结束行程", color: WDColor.mist) {
@@ -75,6 +76,46 @@ struct TripDashboardView: View {
                 if session.status.upcomingLongDescent {
                     Label("前方进入连续长下坡", systemImage: "arrow.down.forward")
                         .font(WDFont.caption()).foregroundStyle(WDColor.amber)
+                }
+            }
+        }
+    }
+
+    private var routePositionCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("路线定位", systemImage: "location.north.line")
+                        .font(WDFont.heading(16))
+                        .foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    if let match = session.routeMatch {
+                        Text(match.confidence.displayName)
+                            .font(WDFont.caption())
+                            .foregroundStyle(match.confidence == .high ? WDColor.bamboo : WDColor.amber)
+                    }
+                }
+
+                if let match = session.routeMatch {
+                    Text("位于路线第 \(String(format: "%.1f", match.routeProgressMeters / 1_000)) km，距终点 \(String(format: "%.1f", match.remainingDistanceMeters / 1_000)) km")
+                        .font(WDFont.body(14).weight(.medium))
+                        .foregroundStyle(WDColor.ricePaper)
+                    if let waypoint = match.nextWaypoint, let distance = match.distanceToNextWaypointMeters {
+                        Text("下一航点：\(waypoint.name) · \(String(format: "%.1f", distance / 1_000)) km")
+                            .font(WDFont.caption())
+                            .foregroundStyle(WDColor.mist)
+                    }
+                    Text(match.isOffRoute ? "可能偏航：\(match.reason)" : match.reason)
+                        .font(WDFont.caption())
+                        .foregroundStyle(match.isOffRoute ? WDColor.amber : WDColor.mist)
+                } else if session.plan.route.geometry != nil {
+                    Text(session.locationStatusText ?? "正在等待 GPS 定位；允许定位权限后会自动匹配到导入路线。")
+                        .font(WDFont.caption())
+                        .foregroundStyle(WDColor.mist)
+                } else {
+                    Text("当前为演示路线。导入 GPX 后可启用真实路线匹配与弱 GPS 估算。")
+                        .font(WDFont.caption())
+                        .foregroundStyle(WDColor.mist)
                 }
             }
         }

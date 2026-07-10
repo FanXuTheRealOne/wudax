@@ -14,6 +14,7 @@ struct Route: Identifiable {
     var hasUnverifiedSegment: Bool     // 无路 / 探路段
     var isOutAndBack: Bool             // 原路返回
     var waterSourceCount: Int
+    var geometry: RouteGeometry? = nil // 导入 GPX 后的真实路线几何
 
     struct RiskPoint: Identifiable {
         let id = UUID()
@@ -73,6 +74,9 @@ struct TripStatus {
     var hoursToSunset: Double = 8
     var upcomingLongDescent: Bool = false
     var profileIndex: Int = 0          // 当前在剖面图中的位置
+    var routeConfidence: RouteMatchConfidence = .none
+    var isOffRoute: Bool = false
+    var routeMatchReason: String = ""
 }
 
 // MARK: - 行中问询触发
@@ -83,6 +87,7 @@ enum CheckinTrigger: String {
     case sunset = "日落风险重算"
     case slowProgress = "进度落后确认"
     case keypoint = "关键点确认"
+    case offRoute = "偏离路线确认"
 
     var explanation: String {
         switch self {
@@ -91,6 +96,7 @@ enum CheckinTrigger: String {
         case .sunset: return "距日落不足 3 小时"
         case .slowProgress: return "实际速度低于计划 18%"
         case .keypoint: return "已到达预设关键复核点"
+        case .offRoute: return "连续定位点偏离计划路线，需要确认当前位置与身体状态"
         }
     }
 }

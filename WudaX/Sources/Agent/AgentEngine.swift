@@ -65,6 +65,15 @@ enum AgentEngine {
             score += 1; reasons.append("路线可信度低且撤退点稀少")
         }
 
+        // 真实 GPX 路线存在时，将持续偏航或低置信度纳入保守风险判断。
+        if plan.route.geometry != nil {
+            if status.isOffRoute {
+                score += 2; reasons.append("连续定位点偏离计划路线：\(status.routeMatchReason)")
+            } else if status.routeConfidence == .low || status.routeConfidence == .none {
+                score += 1; reasons.append("当前路线定位不稳定，需要在下一个明显路标确认位置")
+            }
+        }
+
         let verdict: AgentVerdict =
             score >= 5 ? .retreat :
             score >= 3 ? .downgrade :

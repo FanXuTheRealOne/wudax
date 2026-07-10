@@ -10,6 +10,9 @@
 		009FA3DB7C1AB24A59C8C4C8 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E27D044AEB90DF868D73C42 /* Components.swift */; };
 		04B5AEBD3CA9421B4320CF78 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = CBEC7C9D44CD93B70429F7E8 /* MLXLLM */; };
 		0711D7131E1786081B68285C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F1141EBAF7A5AE50F06200 /* Models.swift */; };
+		A00100000000000000000001 /* GPXRouteImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10100000000000000000001 /* GPXRouteImporter.swift */; };
+		A00100000000000000000002 /* HikeLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10100000000000000000002 /* HikeLocationService.swift */; };
+		A00100000000000000000003 /* RouteMatchingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10100000000000000000003 /* RouteMatchingEngine.swift */; };
 		19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827403BEC8A5090E492B39E7 /* ChatView.swift */; };
 		1B54BCAE031B99668BBC46A2 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A1F41B7346E0AA1F0BAA39C2 /* MLXLMCommon */; };
 		2B8331DEC8E84970E86130C2 /* ink_mountains.png in Resources */ = {isa = PBXBuildFile; fileRef = 245BEC0F4AB55CEC701BD964 /* ink_mountains.png */; };
@@ -40,6 +43,9 @@
 		0A3C8A2A4CE94C3EDA69FE1E /* logo_white.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_white.png; sourceTree = "<group>"; };
 		1206DE82EC0C91D1AF85D96D /* ink_mountains_dusk.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ink_mountains_dusk.png; sourceTree = "<group>"; };
 		12F1141EBAF7A5AE50F06200 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A10100000000000000000001 /* GPXRouteImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXRouteImporter.swift; sourceTree = "<group>"; };
+		A10100000000000000000002 /* HikeLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HikeLocationService.swift; sourceTree = "<group>"; };
+		A10100000000000000000003 /* RouteMatchingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteMatchingEngine.swift; sourceTree = "<group>"; };
 		245BEC0F4AB55CEC701BD964 /* ink_mountains.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ink_mountains.png; sourceTree = "<group>"; };
 		52F5CB1D7261706AE2EBE64D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		5A5321727695AF2A56520A5B /* RetreatDecisionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetreatDecisionView.swift; sourceTree = "<group>"; };
@@ -135,6 +141,9 @@
 			isa = PBXGroup;
 			children = (
 				863FBE20F11D9862AC7563DD /* AgentEngine.swift */,
+				A10100000000000000000001 /* GPXRouteImporter.swift */,
+				A10100000000000000000002 /* HikeLocationService.swift */,
+				A10100000000000000000003 /* RouteMatchingEngine.swift */,
 				FB908F9B7419A36EDBC639C4 /* TripSession.swift */,
 			);
 			path = Agent;
@@ -263,6 +272,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				3081C16A97F9D7CCC5D7863E /* AgentEngine.swift in Sources */,
+				A00100000000000000000001 /* GPXRouteImporter.swift in Sources */,
+				A00100000000000000000002 /* HikeLocationService.swift in Sources */,
+				A00100000000000000000003 /* RouteMatchingEngine.swift in Sources */,
 				40B2A21B403BC3126FA5516E /* BudgetCardView.swift in Sources */,
 				19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */,
 				009FA3DB7C1AB24A59C8C4C8 /* Components.swift in Sources */,
@@ -292,6 +304,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = WUDAX;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WUDAX 使用你的位置，将弱 GPS 定位匹配到已导入的徒步路线。";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -310,6 +323,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = WUDAX;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WUDAX 使用你的位置，将弱 GPS 定位匹配到已导入的徒步路线。";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
