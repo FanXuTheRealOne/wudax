@@ -390,6 +390,11 @@
 					915D7807B280F0EBB57FBC38 = {
 						DevelopmentTeam = MGJM75MGDG;
 						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.HealthKit = {
+							enabled = 1;
+							};
+						};
 					};
 				};
 			};

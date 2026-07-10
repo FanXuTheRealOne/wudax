@@ -50,8 +50,10 @@ final class PlanningCoordinator: ObservableObject {
         guard stage == .idle else { return }
         stage = .requestingHealth
         addAssistant("我先读取这次徒步真正有用的身体数据。没有授权或暂无数据时，我会直接标出来，再用几个问题补齐。", card: .health)
-        let state = await healthKit.requestAuthorization()
-        healthSnapshot = await healthKit.fetchSnapshot()
+        // Give SwiftUI one turn to finish presenting the planning screen before
+        // asking HealthKit to present its system permission sheet.
+        await Task.yield()
+        let state = await requestHealthAuthorization()
         stage = .collecting
         if state == .granted {
             let count = healthSnapshot?.readings.count ?? 0
@@ -62,6 +64,15 @@ final class PlanningCoordinator: ObservableObject {
         addAssistant("请先导入本次路线 GPX。导入后我会检查轨迹、海拔、时间间隔和异常点。", card: .route)
     }
 
+    /// Re-run the system authorization request from the visible HealthKit card.
+    /// iOS shows the sheet when permission is undetermined and safely returns
+    /// the current state after the user has already answered it.
+    func requestHealthAuthorization() async -> HealthKitService.AuthorizationState {
+        let state = await healthKit.requestAuthorization()
+        healthSnapshot = await healthKit.fetchSnapshot()
+        return state
+    }
+
     func importGPX(from url: URL) {
         do {
             let accessed = url.startAccessingSecurityScopedResource()
@@ -69,6 +80,7 @@ final class PlanningCoordinator: ObservableObject {
             let data = try Data(contentsOf: url)
             let document = try parser.parse(data: data)
             let analyzed = analyzer.analyze(document)
+            importError = nil
             analyzedGPX = analyzed
             importedGPXData = data
             stage = .routeImported
