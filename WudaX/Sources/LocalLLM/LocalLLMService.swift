@@ -91,7 +91,7 @@ final class LocalLLMService: ObservableObject {
         let cap = maxTokens
         do {
             let result = try await container.perform { [chat] context -> GenerateResult in
-                let input = try await context.processor.prepare(input: UserInput(chat: chat))
+                let input = try await context.processor.prepare(input: UserInput(chat: chat, tools: AgentToolOrchestrator.toolSpecifications))
                 return try MLXLMCommon.generate(
                     input: input,
                     parameters: GenerateParameters(temperature: 0.6),

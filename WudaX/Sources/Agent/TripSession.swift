@@ -26,6 +26,7 @@ final class TripSession: ObservableObject {
     let location = LocationService()
     let offlineResources = OfflineResourceManager()
     let notifications = NotificationService()
+    let tripStore = TripStore()
     @Published var events: [TripEvent] = []
 
     // 行中
@@ -39,6 +40,7 @@ final class TripSession: ObservableObject {
 
     private var riskTimer: AnyCancellable?
     private var tripStartDate: Date?
+    private var currentTripID = UUID()
 
     init() {
         location.onLocationUpdate = { [weak self] location in
@@ -140,6 +142,7 @@ final class TripSession: ObservableObject {
         status.remainingWaterL = plan.waterL ?? 2.5
         status.hoursToSunset = hoursUntilSunset()
         tripStartDate = Date()
+        currentTripID = UUID()
         events = []
         withAnimation { phase = .inTrip }
         location.startMonitoring()
@@ -150,6 +153,7 @@ final class TripSession: ObservableObject {
     func endTrip(retreated: Bool) {
         stopMonitoring()
         location.stopMonitoring()
+        persistTrip()
         tripEndedByRetreat = retreated
         activeCheckin = nil
         showRetreatSheet = false
@@ -161,6 +165,7 @@ final class TripSession: ObservableObject {
             entry.answer.map { (entry.question, $0) }
         })
         HikingRuleTools.updatePersonalBaseline(profile: &profile, status: status, reviewAnswers: answers)
+        persistTrip()
         reviewEntries = SampleData.reviewQuestions
         withAnimation { phase = .home }
     }
@@ -246,6 +251,22 @@ final class TripSession: ObservableObject {
         guard let sunset = plan.sunsetTime, let dep = plan.departureTime else { return 8 }
         return max(sunset.timeIntervalSince(dep) / 3600 - 1, 4)
     }
+
+    private func persistTrip() {
+        let answers = Dictionary(uniqueKeysWithValues: reviewEntries.compactMap { entry in
+            entry.answer.map { (entry.question, $0) }
+        })
+        let challenge = HikingRuleTools.calculateChallengeGap(route: plan.route, profile: profile,
+                                                               readiness: .init(score: plan.readinessScore, label: plan.readinessLabel,
+                                                                                reasons: [], missingInputs: []))
+        let advice = HikingRuleTools.buildTrainingAdvice(profile: profile, challenge: challenge)
+        let peak = events.map(\.risk).max(by: { $0.rank < $1.rank }) ?? .low
+        let stored = StoredTrip(id: currentTripID, completedAt: Date(), route: planning.analyzedGPX?.document,
+                                summary: HikingRuleTools.summarizeTrip(plan: plan, status: status, peakRisk: peak,
+                                                                        keyEvents: events.map(\.title)),
+                                events: events, reviewAnswers: answers, trainingAdvice: advice)
+        tripStore.save(stored)
+    }
 }
 
 enum Haptics {
@@ -258,5 +279,11 @@ enum Haptics {
         #if os(iOS)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
+    }
+}
+
+private extension RiskLevel {
+    var rank: Int {
+        switch self { case .low: 0; case .medium: 1; case .mediumHigh: 2; case .high: 3 }
     }
 }
