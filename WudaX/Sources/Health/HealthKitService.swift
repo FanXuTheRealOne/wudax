@@ -29,6 +29,9 @@ final class HealthKitService: ObservableObject {
         }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(sleep) }
         types.insert(HKObjectType.workoutType())
+        if let workoutRoute = HKObjectType.seriesType(forIdentifier: HKWorkoutRouteTypeIdentifier) { types.insert(workoutRoute) }
+        if let birth = HKObjectType.characteristicType(forIdentifier: .dateOfBirth) { types.insert(birth) }
+        if let sex = HKObjectType.characteristicType(forIdentifier: .biologicalSex) { types.insert(sex) }
         return types
     }
 
@@ -71,6 +74,31 @@ final class HealthKitService: ObservableObject {
             readings[.sleepDuration] = HealthReading(value: sleep.value, unit: "h", sampledAt: sleep.date,
                                                       sourceName: sleep.sourceName, freshness: freshness(for: sleep.date, comparedTo: date))
             unavailable.remove(.sleepDuration)
+        }
+
+        if let birth = try? store.dateOfBirthComponents(),
+           let birthDate = Calendar.current.date(from: birth),
+           let age = Calendar.current.dateComponents([.year], from: birthDate, to: date).year {
+            readings[.age] = HealthReading(value: Double(age), unit: "years", sampledAt: birthDate,
+                                           sourceName: "HealthKit", freshness: .current)
+            unavailable.remove(.age)
+        }
+        let sex = try? store.biologicalSex()
+        if let sex, sex.biologicalSex != .notSet {
+            readings[.sex] = HealthReading(value: Double(sex.biologicalSex.rawValue), unit: "category",
+                                           sampledAt: date, sourceName: "HealthKit", freshness: .current)
+            unavailable.remove(.sex)
+        }
+        if let workout = await recentWorkoutSummary(asOf: date) {
+            readings[.workouts] = HealthReading(value: Double(workout.count), unit: "count", sampledAt: workout.date,
+                                                 sourceName: workout.sourceName, freshness: freshness(for: workout.date, comparedTo: date))
+            unavailable.remove(.workouts)
+        }
+        if let routeType = HKObjectType.seriesType(forIdentifier: HKWorkoutRouteTypeIdentifier),
+           let routeCount = await countSamples(type: routeType, since: date.addingTimeInterval(-30 * 24 * 3600)) {
+            readings[.routes] = HealthReading(value: Double(routeCount), unit: "count", sampledAt: date,
+                                              sourceName: "HealthKit", freshness: .current)
+            unavailable.remove(.routes)
         }
 
         let snapshot = HealthSnapshot(capturedAt: date, readings: readings, unavailableMetrics: unavailable, authorizationGranted: true)
@@ -123,6 +151,31 @@ final class HealthKitService: ObservableObject {
                 let duration = sleepSamples.reduce(0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } / 3600
                 let latest = sleepSamples.max { $0.endDate < $1.endDate }!
                 continuation.resume(returning: (duration, latest.endDate, latest.sourceRevision.source.name))
+            }
+            self.store.execute(query)
+        }
+    }
+
+    private func recentWorkoutSummary(asOf date: Date) async -> (count: Int, date: Date, sourceName: String?)? {
+        let type = HKObjectType.workoutType()
+        return await withCheckedContinuation { continuation in
+            let start = date.addingTimeInterval(-30 * 24 * 3600)
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: date, options: .strictStartDate)
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                let workouts = (samples ?? []).compactMap { $0 as? HKWorkout }
+                guard let latest = workouts.first else { continuation.resume(returning: nil); return }
+                continuation.resume(returning: (workouts.count, latest.endDate, latest.sourceRevision.source.name))
+            }
+            self.store.execute(query)
+        }
+    }
+
+    private func countSamples(type: HKSampleType, since: Date) async -> Int? {
+        await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: since, end: Date(), options: .strictStartDate)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+                continuation.resume(returning: samples?.count)
             }
             self.store.execute(query)
         }

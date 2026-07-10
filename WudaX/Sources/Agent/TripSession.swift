@@ -130,9 +130,8 @@ final class TripSession: ObservableObject {
         case .food:
             plan.foodKcal = Double(option.replacingOccurrences(of: " kcal", with: ""))
         }
-        if plan.missingQuestions.isEmpty {
-            withAnimation(.easeInOut(duration: 0.6)) { phase = .budgetCard }
-        }
+        // Stage 1 只有在 GPX、HealthKit/问卷和补给问题全部齐备后，
+        // 由聊天流中的“生成行前报告”显式进入预算卡。
     }
 
     func confirmBudget() { withAnimation { phase = .gate } }
