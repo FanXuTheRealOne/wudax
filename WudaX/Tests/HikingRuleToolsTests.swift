@@ -32,5 +32,13 @@ final class HikingRuleToolsTests: XCTestCase {
         XCTAssertEqual(action.action, .turnBack)
         XCTAssertTrue(ControlledAction.allCases.contains(action.action))
     }
-}
 
+    func testHealthKitHeartRateSampleFeedsActiveRiskRule() {
+        let snapshot = HealthSnapshot(capturedAt: Date(),
+                                      readings: [.heartRate: .init(value: 158, unit: "bpm", sampledAt: Date(), sourceName: "test", freshness: .current)],
+                                      unavailableMetrics: [], authorizationGranted: true)
+        let risk = HikingRuleTools.evaluateFatigueRisk(status: TripStatus(), plan: SampleData.plan, snapshot: snapshot)
+        XCTAssertEqual(risk.level, .medium)
+        XCTAssertTrue(risk.reasons.contains { $0.contains("心率") })
+    }
+}
