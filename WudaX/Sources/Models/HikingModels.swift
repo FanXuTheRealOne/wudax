@@ -216,3 +216,34 @@ struct TrainingAdvice: Codable, Equatable, Sendable {
     var sessions: [String]
     var nextRouteAdjustment: String
 }
+
+enum OfflineMapMode: String, Codable, Equatable, Sendable {
+    case fullOfflineMap = "完整离线地图"
+    case routeOnly = "仅路线离线模式"
+    case unavailable = "未准备"
+}
+
+struct OfflineResourceStatus: Codable, Equatable, Sendable {
+    var mode: OfflineMapMode
+    var progress: Double
+    var estimatedSizeMB: Double
+    var updatedAt: Date?
+    var integrityMessage: String
+    var isReady: Bool
+}
+
+struct TripEvent: Identifiable, Codable, Equatable, Sendable {
+    var id: UUID
+    var date: Date
+    var title: String
+    var detail: String
+    var risk: RiskLevel
+
+    init(id: UUID = UUID(), date: Date, title: String, detail: String, risk: RiskLevel) {
+        self.id = id
+        self.date = date
+        self.title = title
+        self.detail = detail
+        self.risk = risk
+    }
+}

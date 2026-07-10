@@ -50,7 +50,7 @@ struct ReviewView: View {
     }
 
     private var questionFlow: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        return VStack(alignment: .leading, spacing: 16) {
             // 已回答
             ForEach(0..<currentIndex, id: \.self) { i in
                 HStack {
@@ -107,11 +107,22 @@ struct ReviewView: View {
     }
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let report = HikingRuleTools.summarizeTrip(plan: session.plan, status: session.status,
+                                                   peakRisk: session.events.map(\.risk).max(by: { $0.rank < $1.rank }) ?? .low,
+                                                   keyEvents: session.events.map(\.title))
+        let advice = HikingRuleTools.buildTrainingAdvice(profile: session.profile,
+                                                          challenge: HikingRuleTools.calculateChallengeGap(route: session.plan.route,
+                                                                                                           profile: session.profile,
+                                                                                                           readiness: .init(score: session.plan.readinessScore,
+                                                                                                                            label: session.plan.readinessLabel,
+                                                                                                                            reasons: [], missingInputs: [])))
+        return VStack(alignment: .leading, spacing: 16) {
             InkCard(light: true) {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("本次失控点", systemImage: "exclamationmark.circle")
                         .font(WDFont.heading(16)).foregroundStyle(WDColor.ink)
+                    Text("计划 \(String(format: "%.1f", report.plannedDistanceKm)) km · 实际 \(String(format: "%.1f", report.actualDistanceKm)) km · \(report.planDeltaMinutes) min")
+                        .font(WDFont.caption()).foregroundStyle(WDColor.ink.opacity(0.65))
                     ForEach(controlLossPoints, id: \.self) { p in
                         Text("· \(p)").font(WDFont.body(14)).foregroundStyle(WDColor.ink.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
@@ -122,9 +133,8 @@ struct ReviewView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("下次类似路线建议", systemImage: "arrow.turn.up.right")
                         .font(WDFont.heading(16)).foregroundStyle(WDColor.bamboo)
-                    Text("· 水量按 3.0 L 起步，发云界强制补满")
-                    Text("· 长下坡前主动使用登山杖，控制步频")
-                    Text("· 14:30 未到下坡起点即降级")
+                    Text("· \(advice.nextRouteAdjustment)")
+                    ForEach(advice.sessions, id: \.self) { Text("· \($0)") }
                 }
                 .font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
             }
@@ -156,6 +166,12 @@ struct ReviewView: View {
            a != "没有出现" { pts.append("心态：\(a)开始只想走出去") }
         if pts.isEmpty { pts.append("本次行程整体在控制范围内") }
         return pts
+    }
+}
+
+private extension RiskLevel {
+    var rank: Int {
+        switch self { case .low: 0; case .medium: 1; case .mediumHigh: 2; case .high: 3 }
     }
 }
 

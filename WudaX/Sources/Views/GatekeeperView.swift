@@ -20,6 +20,12 @@ struct GatekeeperView: View {
 
     private var warnings: [String] { AgentEngine.gateWarnings(plan: session.plan) }
     private var allEquipDone: Bool { checks.allSatisfy(\.done) }
+    private var locationReady: Bool {
+        session.location.authorizationState == .whenInUse || session.location.authorizationState == .always
+    }
+    private var gateReady: Bool {
+        allEquipDone && locationReady && session.notifications.authorizationGranted && session.offlineResources.status.isReady
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,17 +36,18 @@ struct GatekeeperView: View {
                         .font(WDFont.body(14)).foregroundStyle(WDColor.mist)
 
                     checklist
+                    permissionCard
 
                     if !warnings.isEmpty { warningCard }
 
                     actionRow
 
                     PillButton(
-                        title: allEquipDone ? "接受风险并出发" : "先完成装备确认",
-                        color: allEquipDone ? WDColor.ricePaper : WDColor.mossSurface,
-                        textColor: allEquipDone ? WDColor.ink : WDColor.mist
+                        title: gateReady ? "接受风险并出发" : "先完成出发检查",
+                        color: gateReady ? WDColor.ricePaper : WDColor.mossSurface,
+                        textColor: gateReady ? WDColor.ink : WDColor.mist
                     ) {
-                        if allEquipDone { session.depart() }
+                        if gateReady { session.depart() }
                     }
                     Text("Agent 将在行程中按时间、位置与风险节点主动与你确认状态。")
                         .font(WDFont.caption()).foregroundStyle(WDColor.mist.opacity(0.8))
@@ -48,6 +55,10 @@ struct GatekeeperView: View {
                 }
                 .padding(22)
             }
+        }
+        .task {
+            session.location.requestPermission()
+            _ = await session.notifications.requestAuthorization()
         }
     }
 
@@ -129,6 +140,34 @@ struct GatekeeperView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18).stroke(WDColor.amber.opacity(0.4), lineWidth: 1)
         )
+    }
+
+    private var permissionCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("离线与权限", systemImage: "checklist")
+                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                auditRow(title: "GPX / 路线资源", value: session.offlineResources.status.isReady ? "仅路线离线模式" : "未准备",
+                         ok: session.offlineResources.status.isReady)
+                auditRow(title: "HealthKit", value: session.planning.healthKit.authorizationState == .granted ? "已提供或已降级" : "未提供",
+                         ok: session.planning.healthKit.authorizationState == .granted)
+                auditRow(title: "定位", value: locationReady ? "已授权" : "等待授权", ok: locationReady)
+                auditRow(title: "通知", value: session.notifications.authorizationGranted ? "已授权" : "等待授权",
+                         ok: session.notifications.authorizationGranted)
+                Text(session.offlineResources.status.integrityMessage)
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+        }
+    }
+
+    private func auditRow(title: String, value: String, ok: Bool) -> some View {
+        HStack {
+            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
+                .foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
+            Text(title).font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
+            Spacer()
+            Text(value).font(WDFont.caption()).foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
+        }
     }
 
     private var actionRow: some View {
