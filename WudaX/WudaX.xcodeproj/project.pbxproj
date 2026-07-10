@@ -13,6 +13,7 @@
 		19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827403BEC8A5090E492B39E7 /* ChatView.swift */; };
 		1B54BCAE031B99668BBC46A2 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A1F41B7346E0AA1F0BAA39C2 /* MLXLMCommon */; };
 		2B8331DEC8E84970E86130C2 /* ink_mountains.png in Resources */ = {isa = PBXBuildFile; fileRef = 245BEC0F4AB55CEC701BD964 /* ink_mountains.png */; };
+		2F77656E0F9BE1717C917097 /* GPXParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8834CE3DB757CB28AF99C52A /* GPXParserTests.swift */; };
 		3081C16A97F9D7CCC5D7863E /* AgentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863FBE20F11D9862AC7563DD /* AgentEngine.swift */; };
 		31A177EFE7D9BF7F6ED79D5F /* PlanningChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */; };
 		40B2A21B403BC3126FA5516E /* BudgetCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65576A53A4EB3E4062908411 /* BudgetCardView.swift */; };
@@ -20,12 +21,16 @@
 		4F9A39EED4900D9B70F21894 /* exo_thumb.png in Resources */ = {isa = PBXBuildFile; fileRef = 80ABC1BE1CEE90A1B1231A12 /* exo_thumb.png */; };
 		5EA7FE66E39FCE548F1D9E22 /* GatekeeperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C147153596622A27B0AFEC /* GatekeeperView.swift */; };
 		6379786036A87BA4EF2B8E09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 77841FBD00C8403C9AE8D748 /* Assets.xcassets */; };
+		75E27014A2A1389F7C278965 /* HikingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96700C0630A7BDD8104AB321 /* HikingModels.swift */; };
+		77B1EF0612C2AB69D0958E0D /* sanitized-route.gpx in Resources */ = {isa = PBXBuildFile; fileRef = 05B143C37AC125F4221F8D80 /* sanitized-route.gpx */; };
 		7D83611A3608D9D6F329761B /* TripSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB908F9B7419A36EDBC639C4 /* TripSession.swift */; };
 		7FF165137347B1B1FB94D7D2 /* logo_white.png in Resources */ = {isa = PBXBuildFile; fileRef = 0A3C8A2A4CE94C3EDA69FE1E /* logo_white.png */; };
+		9632B87E74643C815C26E927 /* GPXParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E063F808A36DB453A0ABB935 /* GPXParser.swift */; };
 		96CDCB49633977B1BC982852 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */; };
 		A1489C8B125EC8CC96E7C71F /* ExoShowcaseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02B25E221098169C67365353 /* ExoShowcaseView.swift */; };
 		A243482BFF114365EF8EF45B /* exoskeleton.usdz in Resources */ = {isa = PBXBuildFile; fileRef = FDA3B802B5ECD7ABFE419DEB /* exoskeleton.usdz */; };
 		A7B1265F6FE36BC3B42E61E8 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B980F5DE0E162ED79E9FA /* ReviewView.swift */; };
+		B93C97AFFE4BE856146D580F /* GPXAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9F3A25A8CD2E1EF23D2BCE /* GPXAnalyzer.swift */; };
 		C3F42CDD2E11808976071512 /* RetreatDecisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A5321727695AF2A56520A5B /* RetreatDecisionView.swift */; };
 		C771352D57038C4FD145A938 /* LocalLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */; };
 		DBBB03FB537B343E1BE479BA /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F4F868B3B84F458B6025F8 /* HomeView.swift */; };
@@ -35,12 +40,24 @@
 		EE04B48FCE0187EDB961BDDA /* LLMModel in Resources */ = {isa = PBXBuildFile; fileRef = 84FB39C3662C288225D9E82A /* LLMModel */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		FDC0BE5C69EAE3B6A030CFC3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DACA1365E2ADFB50BAABF1A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 915D7807B280F0EBB57FBC38;
+			remoteInfo = WudaX;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		02B25E221098169C67365353 /* ExoShowcaseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExoShowcaseView.swift; sourceTree = "<group>"; };
+		05B143C37AC125F4221F8D80 /* sanitized-route.gpx */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "sanitized-route.gpx"; sourceTree = "<group>"; };
 		0A3C8A2A4CE94C3EDA69FE1E /* logo_white.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_white.png; sourceTree = "<group>"; };
 		1206DE82EC0C91D1AF85D96D /* ink_mountains_dusk.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ink_mountains_dusk.png; sourceTree = "<group>"; };
 		12F1141EBAF7A5AE50F06200 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		245BEC0F4AB55CEC701BD964 /* ink_mountains.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ink_mountains.png; sourceTree = "<group>"; };
+		2A9F3A25A8CD2E1EF23D2BCE /* GPXAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXAnalyzer.swift; sourceTree = "<group>"; };
 		52F5CB1D7261706AE2EBE64D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		5A5321727695AF2A56520A5B /* RetreatDecisionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetreatDecisionView.swift; sourceTree = "<group>"; };
 		5E27D044AEB90DF868D73C42 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
@@ -48,14 +65,18 @@
 		656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningChatView.swift; sourceTree = "<group>"; };
 		65C147153596622A27B0AFEC /* GatekeeperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatekeeperView.swift; sourceTree = "<group>"; };
 		77841FBD00C8403C9AE8D748 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7EF8007B88320F8B16591338 /* WudaXTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WudaXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		80ABC1BE1CEE90A1B1231A12 /* exo_thumb.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = exo_thumb.png; sourceTree = "<group>"; };
 		827403BEC8A5090E492B39E7 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		84FB39C3662C288225D9E82A /* LLMModel */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LLMModel; path = BundledModel/LLMModel; sourceTree = SOURCE_ROOT; };
 		863FBE20F11D9862AC7563DD /* AgentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEngine.swift; sourceTree = "<group>"; };
+		8834CE3DB757CB28AF99C52A /* GPXParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXParserTests.swift; sourceTree = "<group>"; };
+		96700C0630A7BDD8104AB321 /* HikingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HikingModels.swift; sourceTree = "<group>"; };
 		991B980F5DE0E162ED79E9FA /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 		C607B46FA5E9883A9102F0D3 /* TripDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDashboardView.swift; sourceTree = "<group>"; };
 		CAC92CA489E2E57B3E06486E /* WudaXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WudaXApp.swift; sourceTree = "<group>"; };
 		DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMService.swift; sourceTree = "<group>"; };
+		E063F808A36DB453A0ABB935 /* GPXParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXParser.swift; sourceTree = "<group>"; };
 		F7F4F868B3B84F458B6025F8 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		FB908F9B7419A36EDBC639C4 /* TripSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripSession.swift; sourceTree = "<group>"; };
 		FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
@@ -81,6 +102,7 @@
 			children = (
 				3513750A603A5E7C93A493AB /* BundledModel */,
 				A0D3DBB772166E9494755896 /* Sources */,
+				C332C16EF862C2553FEF7432 /* Tests */,
 				1838750A13E900ED891304A6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -89,6 +111,7 @@
 			isa = PBXGroup;
 			children = (
 				FD6967BB2FCADB1F89872A65 /* WudaX.app */,
+				7EF8007B88320F8B16591338 /* WudaXTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -121,6 +144,15 @@
 				84FB39C3662C288225D9E82A /* LLMModel */,
 			);
 			path = BundledModel;
+			sourceTree = "<group>";
+		};
+		579A9A75AB4347FD35FE2F3D /* GPX */ = {
+			isa = PBXGroup;
+			children = (
+				2A9F3A25A8CD2E1EF23D2BCE /* GPXAnalyzer.swift */,
+				E063F808A36DB453A0ABB935 /* GPXParser.swift */,
+			);
+			path = GPX;
 			sourceTree = "<group>";
 		};
 		5DBA94D15D48A4F357B50B14 /* LocalLLM */ = {
@@ -162,6 +194,7 @@
 				CAC92CA489E2E57B3E06486E /* WudaXApp.swift */,
 				734F72A7F0869FEC8D215225 /* Agent */,
 				3396B306E394BDC52B5FCCA4 /* DesignSystem */,
+				579A9A75AB4347FD35FE2F3D /* GPX */,
 				5DBA94D15D48A4F357B50B14 /* LocalLLM */,
 				EF1C78A8E9FFA6B4BE7EB557 /* Models */,
 				3355C0D94330458CBFC98180 /* Resources */,
@@ -170,9 +203,27 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		C332C16EF862C2553FEF7432 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				8834CE3DB757CB28AF99C52A /* GPXParserTests.swift */,
+				E1367CD01744A0409F87BA20 /* Fixtures */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		E1367CD01744A0409F87BA20 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				05B143C37AC125F4221F8D80 /* sanitized-route.gpx */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
 		EF1C78A8E9FFA6B4BE7EB557 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				96700C0630A7BDD8104AB321 /* HikingModels.swift */,
 				12F1141EBAF7A5AE50F06200 /* Models.swift */,
 				FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */,
 			);
@@ -182,6 +233,25 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		43206438D1AFF5C7012F4105 /* WudaXTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9967EA8D103716280557DAC /* Build configuration list for PBXNativeTarget "WudaXTests" */;
+			buildPhases = (
+				C8507C5AD9B41C15F307E4AE /* Sources */,
+				E2AFE126060BEA2FD61E24FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				39AF70A614AF871369A99B6E /* PBXTargetDependency */,
+			);
+			name = WudaXTests;
+			packageProductDependencies = (
+			);
+			productName = WudaXTests;
+			productReference = 7EF8007B88320F8B16591338 /* WudaXTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		915D7807B280F0EBB57FBC38 /* WudaX */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 707EB594E888A27ACB13A5CA /* Build configuration list for PBXNativeTarget "WudaX" */;
@@ -212,6 +282,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					43206438D1AFF5C7012F4105 = {
+						DevelopmentTeam = MGJM75MGDG;
+						ProvisioningStyle = Automatic;
+					};
 					915D7807B280F0EBB57FBC38 = {
 						DevelopmentTeam = MGJM75MGDG;
 						ProvisioningStyle = Automatic;
@@ -236,6 +310,7 @@
 			projectRoot = "";
 			targets = (
 				915D7807B280F0EBB57FBC38 /* WudaX */,
+				43206438D1AFF5C7012F4105 /* WudaXTests */,
 			);
 		};
 /* End PBXProject section */
@@ -255,6 +330,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E2AFE126060BEA2FD61E24FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				77B1EF0612C2AB69D0958E0D /* sanitized-route.gpx in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -267,7 +350,10 @@
 				19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */,
 				009FA3DB7C1AB24A59C8C4C8 /* Components.swift in Sources */,
 				A1489C8B125EC8CC96E7C71F /* ExoShowcaseView.swift in Sources */,
+				B93C97AFFE4BE856146D580F /* GPXAnalyzer.swift in Sources */,
+				9632B87E74643C815C26E927 /* GPXParser.swift in Sources */,
 				5EA7FE66E39FCE548F1D9E22 /* GatekeeperView.swift in Sources */,
+				75E27014A2A1389F7C278965 /* HikingModels.swift in Sources */,
 				DBBB03FB537B343E1BE479BA /* HomeView.swift in Sources */,
 				C771352D57038C4FD145A938 /* LocalLLMService.swift in Sources */,
 				0711D7131E1786081B68285C /* Models.swift in Sources */,
@@ -282,7 +368,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C8507C5AD9B41C15F307E4AE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F77656E0F9BE1717C917097 /* GPXParserTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		39AF70A614AF871369A99B6E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 915D7807B280F0EBB57FBC38 /* WudaX */;
+			targetProxy = FDC0BE5C69EAE3B6A030CFC3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		41555A7B1A19378088219876 /* Debug */ = {
@@ -318,6 +420,23 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.wudax.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8CFE33AA878BB3C13CE2690F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudax.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WudaX.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WudaX";
 			};
 			name = Release;
 		};
@@ -381,6 +500,23 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		CCB1E613BE75074EB54FED96 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.wudax.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WudaX.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WudaX";
+			};
+			name = Debug;
 		};
 		F444817EBAB13BCDA58A161C /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -467,6 +603,15 @@
 			buildConfigurations = (
 				41555A7B1A19378088219876 /* Debug */,
 				50A96B969E675513DEC64D61 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A9967EA8D103716280557DAC /* Build configuration list for PBXNativeTarget "WudaXTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CCB1E613BE75074EB54FED96 /* Debug */,
+				8CFE33AA878BB3C13CE2690F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
