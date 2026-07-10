@@ -27,6 +27,7 @@ final class PlanningCoordinator: ObservableObject {
     @Published private(set) var stage: Stage = .idle
     @Published private(set) var healthSnapshot: HealthSnapshot?
     @Published private(set) var analyzedGPX: AnalyzedGPX?
+    @Published private(set) var importedGPXData: Data?
     @Published private(set) var chat: [ChatItem] = []
     @Published var importError: String?
     @Published var subjective: [String: Double] = [:]
@@ -39,6 +40,7 @@ final class PlanningCoordinator: ObservableObject {
         stage = .idle
         healthSnapshot = nil
         analyzedGPX = nil
+        importedGPXData = nil
         chat = []
         importError = nil
         subjective = [:]
@@ -68,6 +70,7 @@ final class PlanningCoordinator: ObservableObject {
             let document = try parser.parse(data: data)
             let analyzed = analyzer.analyze(document)
             analyzedGPX = analyzed
+            importedGPXData = data
             stage = .routeImported
             let stats = analyzed.statistics
             addAssistant("路线已解析：\(document.name)。\(String(format: "%.1f", stats.distanceMeters / 1000)) km，爬升 \(Int(stats.ascentMeters)) m，质量 \(analyzed.qualityScore)/100。", card: .route)
