@@ -41,6 +41,7 @@ final class TripSession: ObservableObject {
     @Published var reviewEntries = SampleData.reviewQuestions
 
     private var riskTimer: AnyCancellable?
+    private var planningCancellable: AnyCancellable?
     private var tripStartDate: Date?
     private var currentTripID = UUID()
     private var lastRiskLevel: RiskLevel = .low
@@ -52,6 +53,13 @@ final class TripSession: ObservableObject {
         }
         planning.healthKit.onSnapshotUpdate = { [weak self] snapshot in
             self?.handleHealthSnapshot(snapshot)
+        }
+        // PlanningCoordinator is a nested ObservableObject. Forward its
+        // changes so SwiftUI views observing TripSession redraw immediately
+        // when a planning answer (health history, GPX, or questionnaire) is
+        // selected.
+        planningCancellable = planning.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
         }
         // 调试：WUDAX_PHASE 环境变量直接跳转到指定阶段（用于截图验证）
         if let target = ProcessInfo.processInfo.environment["WUDAX_PHASE"] {
