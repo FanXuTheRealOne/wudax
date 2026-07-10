@@ -14,6 +14,7 @@ final class HealthKitService: ObservableObject {
 
     @Published private(set) var authorizationState: AuthorizationState
     @Published private(set) var lastSnapshot: HealthSnapshot?
+    var onSnapshotUpdate: ((HealthSnapshot) -> Void)?
 
     private let store = HKHealthStore()
     private var observerQueries: [HKQuery] = []
@@ -119,7 +120,8 @@ final class HealthKitService: ObservableObject {
                 completion()
                 Task { @MainActor in
                     guard let self else { return }
-                    self.lastSnapshot = await self.fetchSnapshot()
+                    let snapshot = await self.fetchSnapshot()
+                    self.onSnapshotUpdate?(snapshot)
                 }
             }
             observerQueries.append(query)

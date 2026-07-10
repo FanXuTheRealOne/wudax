@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 // MARK: - 阶段三：行中仪表 + Agent 主动问询
 
@@ -13,6 +14,7 @@ struct TripDashboardView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         progressCard
                         if let d = session.lastDecision { verdictCard(d) }
+                        if let document = session.planning.analyzedGPX?.document { routeMapCard(document) }
                         resourceCard
                         if !session.events.isEmpty { eventCard }
                         watchPreview
@@ -110,6 +112,25 @@ struct TripDashboardView: View {
                         .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
                 }
                 Spacer()
+            }
+        }
+    }
+
+    private func routeMapCard(_ document: GPXDocument) -> some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("实时路线", systemImage: "map")
+                        .font(WDFont.heading(15)).foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    Text("GPS \(session.location.isMonitoring ? "已连接" : "等待授权")")
+                        .font(WDFont.caption()).foregroundStyle(session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
+                }
+                RouteMapView(points: document.points, currentCoordinate: session.location.latestLocation?.coordinate)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                Text("路线线条来自本地 GPX；未准备地图瓦片时，底图可能不可用，但轨迹和定位仍可工作。")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
             }
         }
     }

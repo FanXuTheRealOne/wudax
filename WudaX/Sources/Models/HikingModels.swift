@@ -247,3 +247,11 @@ struct TripEvent: Identifiable, Codable, Equatable, Sendable {
         self.risk = risk
     }
 }
+
+struct RecordedTrackPoint: Codable, Equatable, Sendable {
+    var latitude: Double
+    var longitude: Double
+    var elevationMeters: Double?
+    var timestamp: Date
+    var horizontalAccuracyMeters: Double
+}

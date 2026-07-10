@@ -15,9 +15,6 @@ struct HomeView: View {
                 routeCard
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 24)
-                GhostButton(title: "导入 GPX 路线", color: WDColor.ricePaper.opacity(0.8)) {
-                    session.startPlanning()
-                }
                 fatigueSection
                 aiSection
                 gearSection
@@ -90,6 +87,8 @@ struct HomeView: View {
                         .foregroundStyle(WDColor.ink)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
+                    Text("开始计划后，在聊天流上传本次 GPX 路线")
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.ink.opacity(0.55))
 
                     HStack(spacing: 0) {
                         metric("location", "距离", "24.6", "km")

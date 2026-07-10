@@ -115,8 +115,14 @@ enum HikingRuleTools {
         let decision = AgentEngine.evaluate(status: status, plan: plan)
         let stale = snapshot?.readings.values.contains { $0.freshness == .stale } ?? false
         let confidence = stale ? 0.62 : snapshot == nil ? 0.75 : 0.9
-        let level: RiskLevel = decision.verdict == .retreat ? .high : decision.verdict == .downgrade ? .mediumHigh : decision.verdict == .cautious ? .medium : .low
-        return RiskEvaluation(level: level, reasons: decision.reasons, confidence: confidence, staleData: stale)
+        var level: RiskLevel = decision.verdict == .retreat ? .high : decision.verdict == .downgrade ? .mediumHigh : decision.verdict == .cautious ? .medium : .low
+        var reasons = decision.reasons
+        if let heartRate = snapshot?.reading(.heartRate)?.value, heartRate >= 150 {
+            reasons.append("最近心率样本为 (Int(heartRate)) bpm，先降速并重新确认身体状态")
+            if level == .low { level = .medium }
+        }
+        if stale { reasons.append("部分身体数据已过期，当前结论可信度降低") }
+        return RiskEvaluation(level: level, reasons: reasons, confidence: confidence, staleData: stale)
     }
 
     static func selectControlledAction(risk: RiskEvaluation, status: TripStatus, plan: TripPlan) -> ActionRecommendation {
