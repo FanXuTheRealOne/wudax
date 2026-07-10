@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import WudaX
 
 final class PlanningCoordinatorTests: XCTestCase {
@@ -57,5 +58,23 @@ final class PlanningCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.personalHealth.isComplete)
         let result = try XCTUnwrap(coordinator.buildPlan(profile: FatigueProfile()))
         XCTAssertTrue(result.readiness.reasons.contains { $0.contains("膝") || $0.contains("手术") })
+    }
+
+    @MainActor
+    func testTripSessionForwardsPlanningChangesToSwiftUI() {
+        let session = TripSession()
+        let expectation = expectation(description: "planning change forwarded")
+        var didFulfill = false
+        let cancellable = session.objectWillChange.sink { _ in
+            guard !didFulfill else { return }
+            didFulfill = true
+            expectation.fulfill()
+        }
+
+        session.planning.answerInjury(.knee)
+
+        wait(for: [expectation], timeout: 1)
+        XCTAssertEqual(session.planning.personalHealth.injury, .knee)
+        _ = cancellable
     }
 }
