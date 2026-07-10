@@ -30,6 +30,8 @@ final class TripSession: ObservableObject {
     let tripStore = TripStore()
     @Published var events: [TripEvent] = []
     @Published var latestHealthSnapshot: HealthSnapshot?
+    @Published private(set) var preparedRoute: PreparedGPXRoute?
+    @Published private(set) var routeMatch: RouteMatchResult?
 
     // 行中
     @Published var activeCheckin: CheckinTrigger?
@@ -46,6 +48,8 @@ final class TripSession: ObservableObject {
     private var currentTripID = UUID()
     private var lastRiskLevel: RiskLevel = .low
     private var lastOffRouteEventAt: Date?
+    private var routeMatcher: GPXRouteMatcher?
+    private var lastRouteLocationAt: Date?
 
     init() {
         location.onLocationUpdate = { [weak self] location in
@@ -111,6 +115,10 @@ final class TripSession: ObservableObject {
         plan = SampleData.plan
         planning.reset()
         planningResult = nil
+        preparedRoute = nil
+        routeMatcher = nil
+        routeMatch = nil
+        lastRouteLocationAt = nil
         phase = .planningChat
     }
 
@@ -128,8 +136,12 @@ final class TripSession: ObservableObject {
         plan.riskLevel = result.gap.score >= 4 ? .high : result.load.score >= 5 ? .mediumHigh : .medium
         plan.topRisks = Array((result.load.reasons + result.gap.reasons + result.readiness.reasons).prefix(3))
         plan.checkpoints = result.route.riskPoints.map { "\($0.title) · 到达前重新确认状态" }
-        if let analyzed = planning.analyzedGPX {
-            offlineResources.prepare(analyzedGPX: analyzed, originalGPXData: planning.importedGPXData)
+        if let analyzed = planning.analyzedGPX,
+           let prepared = try? GPXRoutePreprocessor().prepare(analyzed.document.copyForPlanning()) {
+            preparedRoute = prepared
+            routeMatcher = GPXRouteMatcher(route: prepared)
+            offlineResources.prepare(analyzedGPX: analyzed, preparedRoute: prepared,
+                                     originalGPXData: planning.importedGPXData)
         }
         phase = .budgetCard
     }
@@ -162,6 +174,15 @@ final class TripSession: ObservableObject {
         events = []
         lastRiskLevel = .low
         lastOffRouteEventAt = nil
+        routeMatch = nil
+        lastRouteLocationAt = nil
+        if let preparedRoute {
+            routeMatcher = GPXRouteMatcher(route: preparedRoute)
+        } else if let analyzed = planning.analyzedGPX,
+                  let prepared = try? GPXRoutePreprocessor().prepare(analyzed.document.copyForPlanning()) {
+            preparedRoute = prepared
+            routeMatcher = GPXRouteMatcher(route: prepared)
+        }
         recorder.start()
         withAnimation { phase = .inTrip }
         location.startMonitoring()
@@ -207,7 +228,14 @@ final class TripSession: ObservableObject {
 
     private func evaluateActiveStatus() {
         guard phase == .inTrip, activeCheckin == nil, !showRetreatSheet else { return }
-        if let tripStartDate { status.elapsedHours = Date().timeIntervalSince(tripStartDate) / 3600 }
+        let now = Date()
+        if let tripStartDate { status.elapsedHours = now.timeIntervalSince(tripStartDate) / 3600 }
+        if let routeMatcher,
+           lastRouteLocationAt.map({ now.timeIntervalSince($0) >= 15 }) ?? false {
+            applyRouteMatch(routeMatcher.locationUnavailable(at: now,
+                                                             cadenceStepsPerMinute: nil),
+                            allowOffRouteAlert: false)
+        }
         status.hoursToSunset = max(hoursUntilSunset() - status.elapsedHours, 0)
         status.remainingWaterL = max((plan.waterL ?? status.remainingWaterL) - status.elapsedHours * profile.waterRatePerHour, 0)
         if plan.route.estimatedHours > 0 {
@@ -242,28 +270,48 @@ final class TripSession: ObservableObject {
 
     private func handleLocation(_ location: CLLocation) {
         recorder.append(location)
-        guard phase == .inTrip, let analyzed = planning.analyzedGPX,
-              let progress = HikingRuleTools.matchRouteProgress(document: analyzed.document,
-                                                                 latitude: location.coordinate.latitude,
-                                                                 longitude: location.coordinate.longitude) else { return }
-        status.elapsedKm = progress.fractionComplete * plan.route.distanceKm
-        if recorder.distanceMeters > 0 {
-            status.elapsedKm = min(plan.route.distanceKm, max(status.elapsedKm, recorder.distanceMeters / 1000))
+        guard phase == .inTrip, let routeMatcher else { return }
+        let input = RouteLocationInput(
+            coordinate: RouteCoordinate(latitude: location.coordinate.latitude,
+                                        longitude: location.coordinate.longitude),
+            horizontalAccuracyMeters: location.horizontalAccuracy,
+            timestamp: location.timestamp,
+            speedMetersPerSecond: location.speed >= 0 ? location.speed : nil,
+            courseDegrees: location.course >= 0 ? location.course : nil,
+            altitudeMeters: location.verticalAccuracy >= 0 ? location.altitude : nil,
+            cadenceStepsPerMinute: nil
+        )
+        lastRouteLocationAt = location.timestamp
+        applyRouteMatch(routeMatcher.match(input), allowOffRouteAlert: true)
+        evaluateActiveStatus()
+    }
+
+    private func applyRouteMatch(_ match: RouteMatchResult, allowOffRouteAlert: Bool) {
+        routeMatch = match
+        let statusProgressMeters: Double = switch match.confidence {
+        case .high, .medium: match.routeProgressMeters
+        case .low, .none: match.lastReliableProgressMeters
         }
+        status.elapsedKm = statusProgressMeters / 1_000
+        let totalDistance = preparedRoute?.totalDistanceMeters ?? max(plan.route.distanceKm * 1_000, 1)
+        let fractionComplete = min(max(statusProgressMeters / max(totalDistance, 1), 0), 1)
         if plan.route.estimatedHours > 0 {
             let expectedFraction = min(status.elapsedHours / plan.route.estimatedHours, 1)
-            status.planDeltaMin = Int(((progress.fractionComplete - expectedFraction) * plan.route.estimatedHours * 60).rounded())
+            status.planDeltaMin = Int(((fractionComplete - expectedFraction) * plan.route.estimatedHours * 60).rounded())
         }
-        status.profileIndex = min(Int(progress.fractionComplete * Double(max(plan.route.elevationProfile.count - 1, 0))),
+        status.profileIndex = min(Int(fractionComplete * Double(max(plan.route.elevationProfile.count - 1, 0))),
                                   max(plan.route.elevationProfile.count - 1, 0))
         status.upcomingLongDescent = status.profileIndex >= max(plan.route.elevationProfile.count - 5, 0)
-        let canRecordOffRouteEvent = lastOffRouteEventAt.map { Date().timeIntervalSince($0) >= 5 * 60 } ?? true
-        if progress.distanceToRouteMeters > 120 && canRecordOffRouteEvent {
-            lastOffRouteEventAt = Date()
-            events.append(.init(date: Date(), title: "偏离已导入路线", detail: "当前位置距路线约 \(Int(progress.distanceToRouteMeters)) m", risk: .mediumHigh))
-            triggerCheckin(.keypoint)
+        let now = Date()
+        let canRecordOffRouteEvent = lastOffRouteEventAt.map { now.timeIntervalSince($0) >= 5 * 60 } ?? true
+        if allowOffRouteAlert, match.isOffRoute, canRecordOffRouteEvent {
+            lastOffRouteEventAt = now
+            events.append(.init(date: now, title: "可能偏离已导入路线",
+                                detail: "距路线约 \(Int(match.distanceToRouteMeters.rounded())) m；\(match.reason)",
+                                risk: .mediumHigh))
+            notifications.postRouteDeviationIfNeeded(match, now: now)
+            triggerCheckin(.offRoute)
         }
-        evaluateActiveStatus()
     }
 
     private func handleHealthSnapshot(_ snapshot: HealthSnapshot) {

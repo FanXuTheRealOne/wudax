@@ -124,6 +124,7 @@ enum CheckinTrigger: String {
     case sunset = "日落风险重算"
     case slowProgress = "进度落后确认"
     case keypoint = "关键点确认"
+    case offRoute = "路线偏离确认"
 
     var explanation: String {
         switch self {
@@ -132,6 +133,7 @@ enum CheckinTrigger: String {
         case .sunset: return "距日落不足 3 小时"
         case .slowProgress: return "实际速度低于计划 18%"
         case .keypoint: return "已到达预设关键复核点"
+        case .offRoute: return "连续定位显示可能偏离已导入的计划路线"
         }
     }
 }
