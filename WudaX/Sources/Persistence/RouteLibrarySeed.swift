@@ -7,9 +7,9 @@ import Foundation
 enum RouteLibrarySeed {
     static var records: [RouteRecord] {
         [
-            make(name: "武功山 · 龙山村—发云界", author: "Leven Mao",
+            make(name: "泥峪河村 · 一脚踏三县", author: "Leven Mao",
                  daysAgo: 3, distanceKm: 24.6, ascentM: 1780, hours: 9.5,
-                 baseLat: 27.46, baseLon: 114.18, seed: 1),
+                 baseLat: 33.86, baseLon: 108.35, seed: 1),
             make(name: "Yulong Snow Mountain", author: "山野_Kepler",
                  daysAgo: 20, distanceKm: 18.3, ascentM: 1260, hours: 6.75,
                  baseLat: 27.10, baseLon: 100.17, seed: 2),

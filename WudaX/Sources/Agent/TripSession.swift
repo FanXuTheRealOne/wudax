@@ -145,15 +145,14 @@ final class TripSession: ObservableObject {
         guard let result = planning.buildPlan(profile: profile) else { return }
         planningResult = result
         plan.route = result.route
-        plan.readinessScore = result.readiness.score
-        plan.readinessLabel = result.readiness.label
-        plan.challengeGapLabel = result.gap.label
+        plan.readinessLabel = result.comparison.difficultyLabel
+        plan.challengeGapLabel = result.comparison.difficultyLabel
         plan.routeQualityScore = planning.analyzedGPX?.qualityScore ?? 100
         plan.equipment = result.equipment
         plan.suggestedWaterL = result.supply.waterLiters
         plan.suggestedFoodKcal = result.supply.foodKilocalories
-        plan.riskLevel = result.gap.score >= 4 ? .high : result.load.score >= 5 ? .mediumHigh : .medium
-        plan.topRisks = Array((result.load.reasons + result.gap.reasons + result.readiness.reasons).prefix(3))
+        plan.riskLevel = result.comparison.riskLevel
+        plan.topRisks = Array(result.comparison.analysis.prefix(3))
         plan.checkpoints = result.route.riskPoints.map { "\($0.title) · 到达前重新确认状态" }
         if let analyzed = planning.analyzedGPX,
            let prepared = try? GPXRoutePreprocessor().prepare(analyzed.document.copyForPlanning()) {
@@ -190,7 +189,7 @@ final class TripSession: ObservableObject {
 
     func depart() {
         status = TripStatus()
-        status.remainingWaterL = plan.waterL ?? 2.5
+        status.remainingWaterL = plan.waterL ?? plan.suggestedWaterL
         status.hoursToSunset = hoursUntilSunset()
         tripStartDate = Date()
         currentTripID = UUID()
@@ -211,9 +210,9 @@ final class TripSession: ObservableObject {
         location.startMonitoring()
         Task {
             _ = await notifications.requestAuthorization()
-            if planning.healthKit.authorizationState == .granted {
-                latestHealthSnapshot = await planning.healthKit.fetchSnapshot()
-            }
+            // 行中实时读取手表 / 苹果健康数据
+            _ = await planning.requestHealthAuthorization()
+            latestHealthSnapshot = planning.healthSnapshot
         }
         startMonitoring()
     }
@@ -351,10 +350,11 @@ final class TripSession: ObservableObject {
 
     // MARK: 三问提交
 
-    func submitCheckin(water: Double, knee: Double, drowsy: Double) {
+    func submitCheckin(fatigue: Double, water: Double, supplyRatio: Double) {
+        status.subjectiveFatigue = fatigue
+        status.drowsiness = fatigue   // 复用为疲劳信号供规则引擎评估
         status.remainingWaterL = water
-        status.kneePain = knee
-        status.drowsiness = drowsy
+        status.remainingSupplyRatio = supplyRatio
         let decision = AgentEngine.evaluate(status: status, plan: plan)
         lastDecision = decision
         let risk = HikingRuleTools.evaluateFatigueRisk(status: status, plan: plan, snapshot: latestHealthSnapshot)

@@ -111,7 +111,9 @@ struct TripStatus {
     var elapsedHours: Double = 0
     var planDeltaMin: Int = 0          // 与计划的偏差（分钟，负为落后）
     var remainingWaterL: Double = 2.5
-    var kneePain: Double = 0           // 0-10
+    var remainingSupplyRatio: Double = 1.0  // 剩余补给占计划的比例 0-1
+    var subjectiveFatigue: Double = 0  // 主观疲劳 0-10
+    var kneePain: Double = 0           // 0-10（行中不再主动问，留给外骨骼数据）
     var drowsiness: Double = 0         // 0-10
     var hoursToSunset: Double = 8
     var upcomingLongDescent: Bool = false
@@ -156,6 +158,46 @@ struct FatigueProfile {
     var waterRatePerHour: Double = 0.35     // L/h
     var drowsinessAfterHours: Double = 7.0
     var tripsRecorded: Int = 3
+}
+
+// MARK: - 过往徒步经历（行前唯一的人身输入；用于与本次路线交叉比对）
+
+struct HikerExperience: Codable, Equatable {
+    var hardestDistanceKm: Double = 0     // 走过最难一次的距离
+    var hardestAscentM: Double = 0        // 那次的累计拔高
+    var highestAltitudeM: Double = 0      // 走过的最高海拔
+    var longestDurationH: Double = 0      // 那次的总耗时
+
+    var isComplete: Bool {
+        hardestDistanceKm > 0 && hardestAscentM > 0 && highestAltitudeM > 0 && longestDurationH > 0
+    }
+
+    private static let key = "wudax.hikerExperience"
+
+    static func load() -> HikerExperience {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let value = try? JSONDecoder().decode(HikerExperience.self, from: data) else { return .init() }
+        return value
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: Self.key)
+        }
+    }
+}
+
+// MARK: - 本次路线 × 过往经历 的交叉比对结果
+
+struct RouteComparison {
+    var difficultyLabel: String        // 在能力内 / 有挑战 / 接近极限 / 超出极限
+    var riskLevel: RiskLevel
+    var estimatedHours: Double          // 为该用户个性化预估的耗时
+    var isOvernight: Bool               // 需要过夜 = 重装线
+    var analysis: [String]              // 为什么风险高 / 难在哪
+    var distanceRatio: Double           // 本次 ÷ 历史最难
+    var ascentRatio: Double
+    var altitudeRatio: Double
 }
 
 // MARK: - 行后复盘

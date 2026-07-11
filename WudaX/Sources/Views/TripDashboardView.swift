@@ -289,8 +289,8 @@ struct CheckinCardView: View {
     let trigger: CheckinTrigger
 
     @State private var water: Double = 1.5
-    @State private var knee: Double = 0
-    @State private var drowsy: Double = 0
+    @State private var supplyRatio: Double = 1.0
+    @State private var fatigue: Double = 0
 
     var body: some View {
         VStack {
@@ -306,6 +306,9 @@ struct CheckinCardView: View {
                     }
                     Spacer()
                 }
+
+                Text("这是补充信息;心率、体能等会结合手表与外骨骼数据自动判断。")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist.opacity(0.85))
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -333,20 +336,36 @@ struct CheckinCardView: View {
                     }
                 }
 
-                ScaleQuestion(title: "膝盖疼痛", lowLabel: "无感", highLabel: "无法行走",
-                              value: $knee, warnThreshold: 4)
-                ScaleQuestion(title: "困倦程度", lowLabel: "清醒", highLabel: "睁不开眼",
-                              value: $drowsy, warnThreshold: 5)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("剩余补给").font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                        Spacer()
+                        Text("\(Int(supplyRatio * 100))%")
+                            .font(WDFont.mono(20))
+                            .foregroundStyle(supplyRatio < 0.35 ? WDColor.amber : WDColor.bamboo)
+                            .contentTransition(.numericText())
+                    }
+                    Slider(value: $supplyRatio, in: 0...1, step: 0.1)
+                        .tint(supplyRatio < 0.35 ? WDColor.amber : WDColor.bamboo)
+                    HStack {
+                        Text("快吃完了").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                        Spacer()
+                        Text("还很充足").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                    }
+                }
+
+                ScaleQuestion(title: "主观疲劳", lowLabel: "轻松", highLabel: "精疲力竭",
+                              value: $fatigue, warnThreshold: 5)
 
                 PillButton(title: "提交状态") {
-                    session.submitCheckin(water: water, knee: knee, drowsy: drowsy)
+                    session.submitCheckin(fatigue: fatigue, water: water, supplyRatio: supplyRatio)
                 }
             }
             .padding(24)
             .background(
                 RoundedRectangle(cornerRadius: 28)
                     .fill(WDColor.deepMoss)
-                    .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+                    .shadow(color: WDColor.ink.opacity(0.18), radius: 30, y: 10)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 28)
@@ -354,6 +373,10 @@ struct CheckinCardView: View {
             )
             .padding(16)
         }
-        .onAppear { water = min(session.status.remainingWaterL, 2.5) }
+        .onAppear {
+            water = min(session.status.remainingWaterL, 2.5)
+            supplyRatio = session.status.remainingSupplyRatio
+            fatigue = session.status.subjectiveFatigue
+        }
     }
 }
