@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Combine
 
 /// 首页、底部导航和地图模块之间共享的轻量导航状态。
@@ -38,200 +39,183 @@ final class AppNavigation: ObservableObject {
     }
 }
 
-/// 首页浏览壳:自定义底部 Tab bar(行程 / 地图 / 数据 / 设置)。
-/// 只在 .home 相位显示;进入规划/行程/复盘等流程时由 RootView 整屏切换。
+/// 使用系统 TabView/UITabBar 承载顶层导航。
+/// iOS 26 由系统自动采用 Liquid Glass；旧系统保持原生材质与无障碍行为。
 struct RootTabView: View {
     @EnvironmentObject var navigation: AppNavigation
 
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            selectedContent
-                .id(navigation.selectedTab)
-                .transition(.opacity.combined(with: .scale(scale: 0.995)))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            WudaXTabBar(
-                selection: Binding(
-                    get: { navigation.selectedTab },
-                    set: { navigation.selectedTab = $0 }
-                )
-            )
-            .frame(height: 84)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 8)
-        }
-        .ignoresSafeArea(.keyboard)
+    private var selection: Binding<AppTab> {
+        Binding(
+            get: { navigation.selectedTab },
+            set: { navigation.selectedTab = $0 }
+        )
     }
 
-    @ViewBuilder
-    private var selectedContent: some View {
-        switch navigation.selectedTab {
-        case .trips: HomeView()
-        case .map: MapTabView()
-        case .data: DataTabView()
-        case .settings: SettingsTabView()
+    var body: some View {
+        TabView(selection: selection) {
+            HomeView()
+                .tag(AppTab.trips)
+                .tabItem { Label(AppTab.trips.title, systemImage: AppTab.trips.icon) }
+
+            MapTabView()
+                .tag(AppTab.map)
+                .tabItem { Label(AppTab.map.title, systemImage: AppTab.map.icon) }
+
+            DataTabView()
+                .tag(AppTab.data)
+                .tabItem { Label(AppTab.data.title, systemImage: AppTab.data.icon) }
+
+            SettingsTabView()
+                .tag(AppTab.settings)
+                .tabItem { Label(AppTab.settings.title, systemImage: AppTab.settings.icon) }
+        }
+        .tint(WDColor.bamboo)
+        .background(NativeTabBarScrubInstaller(selection: selection))
+        .ignoresSafeArea(.keyboard)
+    }
+}
+
+/// 为原生 UITabBar 增加横向滑过选择，同时不替换系统点击、布局和 Liquid Glass 渲染。
+private struct NativeTabBarScrubInstaller: UIViewControllerRepresentable {
+    @Binding var selection: AppTab
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeUIViewController(context: Context) -> TabBarLocatorViewController {
+        let controller = TabBarLocatorViewController()
+        controller.onTabBarLocated = { [weak coordinator = context.coordinator] tabBar in
+            coordinator?.install(on: tabBar)
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: TabBarLocatorViewController, context: Context) {
+        context.coordinator.selection = $selection
+        controller.locateTabBarWhenReady()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var selection: Binding<AppTab>
+        private weak var installedTabBar: UITabBar?
+        private var panGesture: UIPanGestureRecognizer?
+        private let feedback = UISelectionFeedbackGenerator()
+
+        init(selection: Binding<AppTab>) {
+            self.selection = selection
+        }
+
+        func install(on tabBar: UITabBar) {
+            style(tabBar)
+            guard installedTabBar !== tabBar else { return }
+
+            if let panGesture, let installedTabBar {
+                installedTabBar.removeGestureRecognizer(panGesture)
+            }
+
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+            pan.maximumNumberOfTouches = 1
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            tabBar.addGestureRecognizer(pan)
+            installedTabBar = tabBar
+            panGesture = pan
+        }
+
+        private func style(_ tabBar: UITabBar) {
+            tabBar.tintColor = UIColor(WDColor.bamboo)
+            tabBar.unselectedItemTintColor = UIColor(WDColor.mist)
+            tabBar.isTranslucent = true
+
+            if #available(iOS 26.0, *) {
+                // 不设置自定义背景，让系统完整接管 Liquid Glass、对比度和透明度偏好。
+            } else {
+                let appearance = UITabBarAppearance()
+                appearance.configureWithDefaultBackground()
+                appearance.backgroundColor = UIColor(WDColor.deepMoss).withAlphaComponent(0.94)
+                appearance.shadowColor = UIColor(WDColor.line)
+                tabBar.standardAppearance = appearance
+                tabBar.scrollEdgeAppearance = appearance
+            }
+        }
+
+        @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard let tabBar = installedTabBar,
+                  let items = tabBar.items,
+                  items.count == AppTab.allCases.count,
+                  tabBar.bounds.width > 0 else { return }
+
+            if gesture.state == .began { feedback.prepare() }
+            guard gesture.state == .began || gesture.state == .changed else { return }
+
+            let locationX = min(max(gesture.location(in: tabBar).x, 0), tabBar.bounds.width - 1)
+            let itemWidth = tabBar.bounds.width / CGFloat(items.count)
+            let index = min(max(Int(locationX / itemWidth), 0), AppTab.allCases.count - 1)
+            let target = AppTab.allCases[index]
+
+            guard target != selection.wrappedValue else { return }
+            withAnimation(.easeOut(duration: 0.16)) {
+                selection.wrappedValue = target
+            }
+            feedback.selectionChanged()
+            feedback.prepare()
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: installedTabBar)
+            return abs(velocity.x) > abs(velocity.y)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
         }
     }
 }
 
-private struct WudaXTabBar: View {
-    @Binding var selection: AppTab
-    @Namespace private var glassNamespace
-    @State private var dragOriginIndex: Int?
-    @State private var dragTranslation: CGFloat = 0
+private final class TabBarLocatorViewController: UIViewController {
+    var onTabBarLocated: ((UITabBar) -> Void)?
 
-    private let tabs = AppTab.allCases
-
-    var body: some View {
-        GeometryReader { geometry in
-#if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                liquidGlassBar(width: geometry.size.width)
-            } else {
-                fallbackBar(width: geometry.size.width)
-            }
-#else
-            fallbackBar(width: geometry.size.width)
-#endif
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("主导航")
+    override func loadView() {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
     }
 
-#if compiler(>=6.2)
-    @available(iOS 26.0, *)
-    private func liquidGlassBar(width: CGFloat) -> some View {
-        GlassEffectContainer(spacing: 8) {
-            barContent(width: width - 14) {
-                RoundedRectangle(cornerRadius: 27, style: .continuous)
-                    .fill(.clear)
-                    .glassEffect(
-                        .regular.tint(WDColor.bamboo.opacity(0.20)).interactive(),
-                        in: .rect(cornerRadius: 27)
-                    )
-                    .glassEffectID("selected-tab", in: glassNamespace)
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        locateTabBarWhenReady()
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        locateTabBarWhenReady()
+    }
+
+    func locateTabBarWhenReady() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let tabBar = tabBarController?.tabBar {
+                onTabBarLocated?(tabBar)
+                return
             }
-            .padding(7)
-            .glassEffect(.regular, in: .rect(cornerRadius: 34))
+            guard let root = view.window?.rootViewController,
+                  let tabBarController = findTabBarController(in: root) else { return }
+            onTabBarLocated?(tabBarController.tabBar)
         }
     }
-#endif
 
-    private func fallbackBar(width: CGFloat) -> some View {
-        barContent(width: width - 14) {
-            RoundedRectangle(cornerRadius: 27, style: .continuous)
-                .fill(WDColor.mossSurface.opacity(0.88))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 27, style: .continuous)
-                        .stroke(.white.opacity(0.72), lineWidth: 0.8)
-                )
-                .shadow(color: WDColor.ink.opacity(0.10), radius: 10, y: 4)
+    private func findTabBarController(in controller: UIViewController) -> UITabBarController? {
+        if let tabBarController = controller as? UITabBarController { return tabBarController }
+        for child in controller.children {
+            if let match = findTabBarController(in: child) { return match }
         }
-        .padding(7)
-        .background(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .fill(WDColor.deepMoss.opacity(0.72))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .stroke(.white.opacity(0.76), lineWidth: 0.8)
-                )
-                .shadow(color: WDColor.ink.opacity(0.14), radius: 20, y: 8)
-        )
-    }
-
-    private func barContent<Indicator: View>(
-        width: CGFloat,
-        @ViewBuilder indicator: () -> Indicator
-    ) -> some View {
-        let itemWidth = max(width / CGFloat(tabs.count), 1)
-        let selectedIndex = tabs.firstIndex(of: selection) ?? 0
-        let originIndex = dragOriginIndex ?? selectedIndex
-        let rawPosition = CGFloat(originIndex) * itemWidth + dragTranslation
-        let indicatorX = min(max(rawPosition, 0), itemWidth * CGFloat(tabs.count - 1))
-
-        return ZStack(alignment: .leading) {
-            indicator()
-                .frame(width: max(itemWidth - 4, 1), height: 66)
-                .offset(x: indicatorX + 2)
-
-            HStack(spacing: 0) {
-                ForEach(tabs, id: \.self) { tab in
-                    tabButton(tab, width: itemWidth)
-                }
-            }
+        if let presented = controller.presentedViewController {
+            return findTabBarController(in: presented)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .simultaneousGesture(tabDragGesture(itemWidth: itemWidth))
-    }
-
-    private func tabButton(_ tab: AppTab, width: CGFloat) -> some View {
-        let isSelected = selection == tab
-        return Button {
-            select(tab)
-        } label: {
-            VStack(spacing: 5) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 23, weight: isSelected ? .semibold : .regular))
-                    .symbolRenderingMode(.hierarchical)
-                Text(tab.title)
-                    .font(WDFont.caption(11).weight(isSelected ? .semibold : .medium))
-            }
-            .foregroundStyle(isSelected ? WDColor.bamboo : WDColor.ricePaper.opacity(0.78))
-            .frame(width: width, height: 66)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func tabDragGesture(itemWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 5, coordinateSpace: .local)
-            .onChanged { value in
-                let startIndex = dragOriginIndex ?? (tabs.firstIndex(of: selection) ?? 0)
-                if dragOriginIndex == nil { dragOriginIndex = startIndex }
-                dragTranslation = value.translation.width
-
-                let targetIndex = clampedIndex(
-                    Int((CGFloat(startIndex) + value.translation.width / itemWidth).rounded())
-                )
-                let target = tabs[targetIndex]
-                if target != selection {
-                    withAnimation(.easeOut(duration: 0.16)) {
-                        selection = target
-                    }
-                    Haptics.tap()
-                }
-            }
-            .onEnded { value in
-                let startIndex = dragOriginIndex ?? (tabs.firstIndex(of: selection) ?? 0)
-                let targetIndex = clampedIndex(
-                    Int((CGFloat(startIndex) + value.predictedEndTranslation.width / itemWidth).rounded())
-                )
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-                    selection = tabs[targetIndex]
-                    dragOriginIndex = nil
-                    dragTranslation = 0
-                }
-                Haptics.tap()
-            }
-    }
-
-    private func select(_ tab: AppTab) {
-        guard tab != selection else { return }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-            selection = tab
-            dragOriginIndex = nil
-            dragTranslation = 0
-        }
-        Haptics.tap()
-    }
-
-    private func clampedIndex(_ index: Int) -> Int {
-        min(max(index, 0), tabs.count - 1)
+        return nil
     }
 }
