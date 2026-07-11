@@ -9,6 +9,7 @@ struct MapTabView: View {
     @State private var cameraMode: RouteMapCameraMode = .route
     @State private var cameraRequestID = 0
     @State private var locationRevision = 0
+    @State private var mapLayer: RouteMapLayer = .standard
 
     private var selected: RouteRecord? {
         if let id = navigation.selectedMapRouteID,
@@ -31,12 +32,18 @@ struct MapTabView: View {
                     currentCoordinate: session.location.latestLocation?.coordinate,
                     userHeadingDegrees: session.location.headingDegrees,
                     cameraMode: cameraMode,
-                    cameraRequestID: cameraRequestID
+                    cameraRequestID: cameraRequestID,
+                    mapLayer: mapLayer
                 )
                 .ignoresSafeArea(edges: .top)
 
                 VStack(spacing: 12) {
-                    routePicker(record)
+                    HStack(alignment: .top, spacing: 8) {
+                        routePicker(record)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        mapLayerMenu
+                    }
+                    .padding(.horizontal, 16)
                     Spacer()
                     mapFocusControls
                     infoBar(record)
@@ -133,10 +140,33 @@ struct MapTabView: View {
                 .fill(WDColor.deepMoss.opacity(0.96))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.line.opacity(0.65), lineWidth: 1))
         )
-        .padding(.horizontal, 16)
     }
 
     // MARK: 地图相机控制
+
+    private var mapLayerMenu: some View {
+        Menu {
+            ForEach(RouteMapLayer.allCases) { layer in
+                Button {
+                    mapLayer = layer
+                    Haptics.tap()
+                } label: {
+                    Label(layer.title, systemImage: layer.symbolName)
+                }
+            }
+        } label: {
+            Image(systemName: "square.3.layers.3d.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(WDColor.ricePaper)
+                .frame(width: 48, height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(WDColor.deepMoss.opacity(0.96))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.line.opacity(0.65), lineWidth: 1))
+                )
+        }
+        .accessibilityLabel("切换地图图层")
+    }
 
     private var mapFocusControls: some View {
         HStack(spacing: 10) {

@@ -8,6 +8,38 @@ enum RouteMapCameraMode: Equatable {
     case user
 }
 
+enum RouteMapLayer: String, CaseIterable, Identifiable {
+    case standard
+    case satellite
+    case hybrid
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard: return "标准"
+        case .satellite: return "卫星"
+        case .hybrid: return "混合"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .standard: return "map"
+        case .satellite: return "globe.americas.fill"
+        case .hybrid: return "square.3.layers.3d"
+        }
+    }
+
+    var mapType: MKMapType {
+        switch self {
+        case .standard: return .standard
+        case .satellite: return .satellite
+        case .hybrid: return .hybrid
+        }
+    }
+}
+
 /// 本地 GPX 轨迹叠加层。底图是否可用由系统缓存决定，不能把在线瓦片假装成离线资源。
 struct RouteMapView: UIViewRepresentable {
     let points: [GPXTrackPoint]
@@ -23,13 +55,14 @@ struct RouteMapView: UIViewRepresentable {
     var showsEndpointFlags = false
     /// 尚未到达起点:从当前位置到路线起点画虚线引导。
     var guideLineToStart = false
+    var mapLayer: RouteMapLayer = .standard
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView(frame: .zero)
         map.delegate = context.coordinator
-        map.mapType = .standard
+        map.mapType = mapLayer.mapType
         map.showsUserLocation = false
         map.showsCompass = false
         map.showsScale = false
@@ -46,6 +79,10 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     private func update(_ map: MKMapView, context: Context, fitRoute: Bool) {
+        if map.mapType != mapLayer.mapType {
+            map.mapType = mapLayer.mapType
+        }
+
         let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
         guard coordinates.count >= 2 else { return }
 
