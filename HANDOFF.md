@@ -12,6 +12,14 @@ WudaX is an iPhone hiking app. The current implementation has a working planning
 
 ## Implemented in the latest work (2026-07-11)
 
+### Global in-trip agent (session-scoped contexts)
+
+- `WudaXAgent` is an app-global singleton (one LLM container for the whole app); each trip opens an isolated `AgentSessionContext` (transcript + signal memory + cooldowns). Contexts are archived in memory on trip end.
+- `AgentDataBus` exposes ALL trip data to the local LLM as sectioned Chinese snapshots (route/risk points/provenance/user profile/plan/live status/RouteLookahead ahead-of-you terrain/all HealthKit metrics/supplies/rule-engine verdict/events/per-route walk history). Rule engine remains the safety layer; the LLM only phrases.
+- Proactive announcements: change-detection + cooldown signals (session start, verdict change, off-route, heart-rate shift vs session baseline, sunset window, upcoming risk point, pace bands, progress milestones). LLM phrases them; falls back silently to rule-engine copy when the model is unavailable.
+- `SessionAgentView` chat window (proactive + Q&A in one stream, quick questions, model status); entry via sparkles button (unread badge) in the live map controls plus an auto-dismissing banner.
+- `LocalLLMService.respond()` pure generation API + Qwen3 `<think>` stripping; **simulator guard added — MLX Metal init aborts (crashes) on simulator, so loadIfNeeded fails gracefully there**. ChatView now shares the global model instance.
+
 ### Session flow rework
 
 - Phase machine is now `home → planningChat → budgetCard → inTrip → review`. The former `gate` phase was merged away: `BudgetCardView` ("行前报告") now contains the match report AND the interactive equipment checklist + permission audit, with the depart CTA. `GatekeeperView.swift` was deleted (`CheckToggleStyle` moved to `DesignSystem/Components.swift`).
