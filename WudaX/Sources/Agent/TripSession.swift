@@ -63,7 +63,7 @@ final class TripSession: ObservableObject {
     private var lastRouteLocationAt: Date?
     /// 本次规划/行程对应路线库中的记录:入口 1 为所选历史记录,入口 2 为新入库记录。
     /// 行程结束时写进 StoredTrip.routeRecordID,作为该路线的行走 log。
-    private var activeRouteRecordID: UUID?
+    private(set) var activeRouteRecordID: UUID?
     /// 距路线起点多近视为「到达起点」,自动开始记录。
     static let startProximityMeters: Double = 60
 

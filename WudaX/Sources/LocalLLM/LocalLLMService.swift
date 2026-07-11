@@ -45,6 +45,12 @@ final class LocalLLMService: ObservableObject {
     func loadIfNeeded() async {
         guard container == nil else { return }
         if case .loading = loadState { return }
+        // MLX 初始化 Metal 设备在模拟器上会直接 abort(不是抛错),必须提前拦截;
+        // 拦截后所有调用方(首页问答/行中 agent)自动降级为规则引擎文案。
+        #if targetEnvironment(simulator)
+        loadState = .failed("模拟器不支持端侧模型,需真机 Metal GPU")
+        return
+        #else
         loadState = .loading
         do {
             guard let base = Bundle.main.resourceURL else {
@@ -62,6 +68,52 @@ final class LocalLLMService: ObservableObject {
         } catch {
             loadState = .failed(error.localizedDescription)
         }
+        #endif
+    }
+
+    // MARK: 纯生成接口(行中 Agent 等调用方共用同一模型容器)
+
+    /// 给定 system + 对话历史直接生成一段回复;不读写 `messages`(那是首页问答窗口的状态)。
+    func respond(system: String,
+                 history: [(role: Msg.Role, text: String)],
+                 maxTokens: Int = 512) async throws -> String {
+        await loadIfNeeded()
+        guard case .ready = loadState, let container else {
+            throw NSError(domain: "WUDAX", code: -3,
+                          userInfo: [NSLocalizedDescriptionKey: "本地模型未就绪(需要真机 Metal GPU)"])
+        }
+        var chat: [Chat.Message] = [.system(system)]
+        for item in history {
+            switch item.role {
+            case .user: chat.append(.user(item.text))
+            case .assistant: chat.append(.assistant(item.text))
+            }
+        }
+        let cap = maxTokens
+        let result = try await container.perform { [chat] context -> GenerateResult in
+            let input = try await context.processor.prepare(input: UserInput(chat: chat))
+            return try MLXLMCommon.generate(
+                input: input,
+                parameters: GenerateParameters(temperature: 0.6),
+                context: context
+            ) { tokens in
+                tokens.count >= cap ? .stop : .more
+            }
+        }
+        return Self.stripThinking(result.output)
+    }
+
+    /// 剥离 Qwen3 思考模式的 <think>…</think> 段(含未闭合的残段)。
+    nonisolated static func stripThinking(_ text: String) -> String {
+        var output = text
+        while let start = output.range(of: "<think>"),
+              let end = output.range(of: "</think>", range: start.upperBound..<output.endIndex) {
+            output.removeSubrange(start.lowerBound..<end.upperBound)
+        }
+        if let orphan = output.range(of: "<think>") {
+            output.removeSubrange(orphan.lowerBound..<output.endIndex)
+        }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: 发送一条消息并流式生成

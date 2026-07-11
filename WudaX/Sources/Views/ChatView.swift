@@ -5,7 +5,8 @@ import SwiftUI
 
 struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var llm = LocalLLMService()
+    // 全局共享的模型服务(与行中 WudaXAgent 同一个容器,权重只加载一次)。
+    @EnvironmentObject var llm: LocalLLMService
     @State private var draft = ""
     @FocusState private var inputFocused: Bool
 

@@ -5,6 +5,8 @@ struct WudaXApp: App {
     @StateObject private var session = TripSession()
     @StateObject private var library = RouteLibraryStore()
     @StateObject private var navigation = AppNavigation()
+    /// 全局唯一的行中智能体:跨 session 存活,每次行程在其内部开独立 context。
+    @StateObject private var agent = WudaXAgent()
 
     var body: some Scene {
         WindowGroup {
@@ -12,8 +14,13 @@ struct WudaXApp: App {
                 .environmentObject(session)
                 .environmentObject(library)
                 .environmentObject(navigation)
+                .environmentObject(agent)
+                .environmentObject(agent.llm)   // 首页 ChatView 与 agent 共享同一模型容器
                 .preferredColorScheme(.light)
-                .onAppear { session.library = library }
+                .onAppear {
+                    session.library = library
+                    agent.attach(session)
+                }
         }
     }
 }

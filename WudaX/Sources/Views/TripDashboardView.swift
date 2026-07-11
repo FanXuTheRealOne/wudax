@@ -7,9 +7,11 @@ import MapKit
 
 struct TripDashboardView: View {
     @EnvironmentObject var session: TripSession
+    @EnvironmentObject var agent: WudaXAgent
     @State private var cameraMode: RouteMapCameraMode = .automatic
     @State private var cameraRequestID = 0
     @State private var showDetailSheet = false
+    @State private var showAgentSheet = false
     @State private var showEndConfirm = false
     @State private var locationRevision = 0
     @State private var pulsing = false
@@ -32,6 +34,17 @@ struct TripDashboardView: View {
             VStack(spacing: 0) {
                 statusPill
                     .padding(.top, 8)
+                if let banner = agent.latestBanner {
+                    agentBanner(banner)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .task(id: banner.id) {
+                            try? await Task.sleep(nanoseconds: 8_000_000_000)
+                            if agent.latestBanner?.id == banner.id {
+                                withAnimation(.easeOut(duration: 0.3)) { agent.latestBanner = nil }
+                            }
+                        }
+                }
                 Spacer()
                 mapControls
                     .padding(.bottom, 10)
@@ -47,6 +60,11 @@ struct TripDashboardView: View {
         }
         .sheet(isPresented: $showDetailSheet) {
             TripDetailSheet()
+                .presentationDetents([.medium, .large])
+                .presentationBackground(WDColor.inkPine)
+        }
+        .sheet(isPresented: $showAgentSheet) {
+            SessionAgentView()
                 .presentationDetents([.medium, .large])
                 .presentationBackground(WDColor.inkPine)
         }
@@ -142,6 +160,7 @@ struct TripDashboardView: View {
         HStack {
             Spacer()
             VStack(spacing: 8) {
+                agentButton
                 mapControlButton("arrow.up.left.and.arrow.down.right", selected: cameraMode == .route) {
                     cameraMode = .route
                     cameraRequestID += 1
@@ -154,6 +173,71 @@ struct TripDashboardView: View {
                 }
             }
         }
+    }
+
+    /// 行中 AI 窗口入口:未读播报数角标。
+    private var agentButton: some View {
+        Button {
+            showAgentSheet = true
+            agent.markRead()
+            Haptics.tap()
+        } label: {
+            Image(systemName: "sparkles")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(WDColor.onDark)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle().fill(WDColor.bamboo)
+                        .shadow(color: WDColor.ink.opacity(0.16), radius: 8, y: 4)
+                )
+                .overlay(alignment: .topTrailing) {
+                    if let unread = agent.activeContext?.unreadCount, unread > 0 {
+                        Text("\(min(unread, 9))")
+                            .font(WDFont.caption(10).weight(.bold)).foregroundStyle(.white)
+                            .frame(width: 17, height: 17)
+                            .background(Circle().fill(WDColor.cinnabar))
+                            .offset(x: 3, y: -3)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 主动播报浮条:点击进入 AI 窗口,8 秒后自动收起。
+    private func agentBanner(_ message: AgentMessage) -> some View {
+        Button {
+            showAgentSheet = true
+            agent.markRead()
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(WDColor.amber)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let headline = message.signalHeadline {
+                        Text(headline)
+                            .font(WDFont.caption(10).weight(.semibold)).foregroundStyle(WDColor.amber)
+                    }
+                    Text(message.text)
+                        .font(WDFont.body(13)).foregroundStyle(WDColor.ricePaper)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11)).foregroundStyle(WDColor.mist)
+                    .padding(.top, 3)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(WDColor.deepMoss.opacity(0.97))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.amber.opacity(0.4), lineWidth: 1))
+                    .shadow(color: WDColor.ink.opacity(0.12), radius: 12, y: 5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func mapControlButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
