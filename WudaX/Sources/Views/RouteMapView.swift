@@ -45,6 +45,7 @@ struct RouteMapView: UIViewRepresentable {
     let points: [GPXTrackPoint]
     var currentCoordinate: CLLocationCoordinate2D?
     var tracksUserLocation = false
+    var userHeadingDegrees: CLLocationDirection?
     var matchedCoordinate: RouteCoordinate?
     var matchConfidence: RouteMatchConfidence?
     var isOffRoute = false
@@ -88,6 +89,7 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     private func update(_ map: MKMapView, context: Context, fitRoute: Bool) {
+        context.coordinator.fallbackHeadingDegrees = userHeadingDegrees
         if map.mapType != mapLayer.mapType {
             map.mapType = mapLayer.mapType
         }
@@ -99,7 +101,14 @@ struct RouteMapView: UIViewRepresentable {
         guard coordinates.count >= 2 else { return }
 
         let polyline = syncRoute(map, coordinates: coordinates, coordinator: context.coordinator)
-        _ = syncGuideLine(map, coordinates: coordinates, coordinator: context.coordinator)
+        context.coordinator.updateGuideLine(
+            in: map,
+            enabled: guideLineToStart,
+            fallbackCurrentCoordinate: currentCoordinate,
+            startCoordinate: coordinates.first
+        )
+        (map.view(for: map.userLocation) as? UserHeadingPuckView)?
+            .update(headingDegrees: userHeadingDegrees)
         syncMatchedAnnotation(map, coordinator: context.coordinator)
         updateCamera(map, polyline: polyline, coordinator: context.coordinator, fitRoute: fitRoute)
     }
@@ -143,28 +152,6 @@ struct RouteMapView: UIViewRepresentable {
             renderer.setNeedsDisplay()
         }
         return coordinator.polyline!
-    }
-
-    private func syncGuideLine(_ map: MKMapView,
-                               coordinates: [CLLocationCoordinate2D],
-                               coordinator: Coordinator) -> GuidePolyline? {
-        let startCoordinate = coordinates.first
-        let key = MapGuideKey(enabled: guideLineToStart,
-                              currentCoordinate: currentCoordinate,
-                              startCoordinate: startCoordinate)
-        guard coordinator.guideKey != key else { return coordinator.guidePolyline }
-
-        if let guidePolyline = coordinator.guidePolyline { map.removeOverlay(guidePolyline) }
-        coordinator.guidePolyline = nil
-        coordinator.guideKey = key
-
-        guard guideLineToStart, let currentCoordinate, let startCoordinate else { return nil }
-        var guide = [currentCoordinate, startCoordinate]
-        let guideCount = guide.count
-        let guidePolyline = GuidePolyline(coordinates: &guide, count: guideCount)
-        map.addOverlay(guidePolyline)
-        coordinator.guidePolyline = guidePolyline
-        return guidePolyline
     }
 
     private func syncMatchedAnnotation(_ map: MKMapView, coordinator: Coordinator) {
@@ -293,6 +280,7 @@ struct RouteMapView: UIViewRepresentable {
         var hasSetInitialRegion = false
         var hasSetUserRegion = false
         var isFollowSuspendedByGesture = false
+        var fallbackHeadingDegrees: CLLocationDirection?
         fileprivate var routeKey: RouteMapRouteKey?
         fileprivate var polyline: MKPolyline?
         fileprivate var guideKey: MapGuideKey?
@@ -300,6 +288,45 @@ struct RouteMapView: UIViewRepresentable {
         fileprivate var startAnnotation: RouteEndpointAnnotation?
         fileprivate var endAnnotation: RouteEndpointAnnotation?
         fileprivate var matchedAnnotation: MatchedRouteAnnotation?
+        private var guideEnabled = false
+        private var guideFallbackCoordinate: CLLocationCoordinate2D?
+        private var guideStartCoordinate: CLLocationCoordinate2D?
+
+        func updateGuideLine(in mapView: MKMapView,
+                             enabled: Bool,
+                             fallbackCurrentCoordinate: CLLocationCoordinate2D?,
+                             startCoordinate: CLLocationCoordinate2D?) {
+            guideEnabled = enabled
+            guideFallbackCoordinate = fallbackCurrentCoordinate
+            guideStartCoordinate = startCoordinate
+
+            let currentCoordinate = mapView.userLocation.location?.coordinate
+                ?? fallbackCurrentCoordinate
+            let key = MapGuideKey(enabled: enabled,
+                                  currentCoordinate: currentCoordinate,
+                                  startCoordinate: startCoordinate)
+            guard guideKey != key else { return }
+
+            if let guidePolyline { mapView.removeOverlay(guidePolyline) }
+            guidePolyline = nil
+            guideKey = key
+
+            guard enabled, let currentCoordinate, let startCoordinate else { return }
+            var guide = [currentCoordinate, startCoordinate]
+            let guideCount = guide.count
+            let polyline = GuidePolyline(coordinates: &guide, count: guideCount)
+            mapView.addOverlay(polyline)
+            guidePolyline = polyline
+        }
+
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            updateGuideLine(in: mapView,
+                            enabled: guideEnabled,
+                            fallbackCurrentCoordinate: guideFallbackCoordinate,
+                            startCoordinate: guideStartCoordinate)
+            guard let puck = mapView.view(for: userLocation) as? UserHeadingPuckView else { return }
+            puck.update(headingDegrees: headingDegrees(from: userLocation) ?? fallbackHeadingDegrees)
+        }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             guard lastCameraMode != .route,
@@ -314,6 +341,27 @@ struct RouteMapView: UIViewRepresentable {
                 return true
             }
             return view.subviews.contains { containsActiveGesture(in: $0) }
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            (mapView.view(for: mapView.userLocation) as? UserHeadingPuckView)?
+                .updateConeRadius(headingConeRadius(in: mapView))
+        }
+
+        private func headingDegrees(from userLocation: MKUserLocation) -> CLLocationDirection? {
+            guard let heading = userLocation.heading, heading.headingAccuracy >= 0 else { return nil }
+            return heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+        }
+
+        private func headingConeRadius(in mapView: MKMapView) -> CGFloat {
+            guard mapView.bounds.width > 1,
+                  !mapView.visibleMapRect.isNull,
+                  !mapView.visibleMapRect.isEmpty else { return 27 }
+            let metersAcross = mapView.visibleMapRect.size.width
+                * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
+            let metersPerPoint = metersAcross / Double(mapView.bounds.width)
+            guard metersPerPoint.isFinite, metersPerPoint > 0 else { return 27 }
+            return min(max(CGFloat(110 / metersPerPoint), 16), 58)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -338,9 +386,11 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if annotation is MKUserLocation {
                 let identifier = "mapkit-user-location"
-                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKUserLocationView)
-                    ?? MKUserLocationView(annotation: annotation, reuseIdentifier: identifier)
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? UserHeadingPuckView)
+                    ?? UserHeadingPuckView(annotation: annotation, reuseIdentifier: identifier)
                 view.annotation = annotation
+                view.update(headingDegrees: headingDegrees(from: mapView.userLocation) ?? fallbackHeadingDegrees)
+                view.updateConeRadius(headingConeRadius(in: mapView))
                 return view
             }
 
@@ -508,5 +558,107 @@ private final class RouteEndpointAnnotation: NSObject, MKAnnotation {
     init(coordinate: CLLocationCoordinate2D, kind: RouteEndpoint) {
         self.coordinate = coordinate
         self.kind = kind
+    }
+}
+
+/// 附着在 MapKit 原生 MKUserLocation 上的方向标；坐标由 MapKit 管理，视图只负责外观。
+private final class UserHeadingPuckView: MKAnnotationView {
+    private let headingGradient = CAGradientLayer()
+    private let headingMask = CAShapeLayer()
+    private let halo = CAShapeLayer()
+    private let whiteRing = CAShapeLayer()
+    private let blueDot = CAShapeLayer()
+    private var headingDegrees: CLLocationDirection?
+    private var coneRadius: CGFloat = 27
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: 132, height: 132)
+        backgroundColor = .clear
+        canShowCallout = false
+        displayPriority = .required
+        isUserInteractionEnabled = false
+        setupLayers()
+    }
+
+    required init?(coder: NSCoder) { return nil }
+
+    private func setupLayers() {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        headingGradient.frame = bounds
+        headingGradient.type = .radial
+        headingGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
+        headingGradient.colors = [
+            UIColor.systemBlue.withAlphaComponent(0.38).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0.18).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0).cgColor
+        ]
+        headingGradient.locations = [0, 0.58, 1]
+        headingMask.frame = bounds
+        headingMask.fillColor = UIColor.white.cgColor
+        headingGradient.mask = headingMask
+
+        halo.path = UIBezierPath(ovalIn: CGRect(x: center.x - 16, y: center.y - 16,
+                                                width: 32, height: 32)).cgPath
+        halo.fillColor = UIColor.systemBlue.withAlphaComponent(0.14).cgColor
+        whiteRing.path = UIBezierPath(ovalIn: CGRect(x: center.x - 11, y: center.y - 11,
+                                                     width: 22, height: 22)).cgPath
+        whiteRing.fillColor = UIColor.white.cgColor
+        whiteRing.shadowColor = UIColor.black.withAlphaComponent(0.2).cgColor
+        whiteRing.shadowRadius = 2
+        whiteRing.shadowOffset = CGSize(width: 0, height: 1)
+        whiteRing.shadowOpacity = 1
+        blueDot.path = UIBezierPath(ovalIn: CGRect(x: center.x - 7, y: center.y - 7,
+                                                   width: 14, height: 14)).cgPath
+        blueDot.fillColor = UIColor.systemBlue.cgColor
+
+        layer.addSublayer(headingGradient)
+        layer.addSublayer(halo)
+        layer.addSublayer(whiteRing)
+        layer.addSublayer(blueDot)
+    }
+
+    func update(headingDegrees: CLLocationDirection?) {
+        self.headingDegrees = headingDegrees
+        redrawCone()
+    }
+
+    func updateConeRadius(_ radius: CGFloat) {
+        let radius = min(max(radius, 16), 58)
+        guard abs(radius - coneRadius) >= 0.5 else { return }
+        coneRadius = radius
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
+        CATransaction.commit()
+        redrawCone()
+    }
+
+    private func redrawCone() {
+        guard let headingDegrees else {
+            headingMask.path = nil
+            return
+        }
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let radians = CGFloat((headingDegrees - 90) * .pi / 180)
+        let spread: CGFloat = .pi / 11
+        let path = UIBezierPath()
+        path.move(to: center)
+        path.addArc(withCenter: center, radius: coneRadius,
+                    startAngle: radians - spread, endAngle: radians + spread,
+                    clockwise: true)
+        path.close()
+
+        let animation = CABasicAnimation(keyPath: "path")
+        animation.fromValue = (headingMask.presentation() as? CAShapeLayer)?.path ?? headingMask.path
+        animation.toValue = path.cgPath
+        animation.duration = 0.12
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        headingMask.add(animation, forKey: "headingPath")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        headingMask.path = path.cgPath
+        CATransaction.commit()
     }
 }

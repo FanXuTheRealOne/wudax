@@ -26,6 +26,9 @@ struct DataTabView: View {
                 .padding(.top, 12)
             }
         }
+        .task {
+            await session.refreshAppleHealthAccess()
+        }
     }
 
     private var header: some View {
@@ -228,22 +231,154 @@ struct DataTabView: View {
 
     private var healthSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Apple Health", systemImage: "heart.text.square").font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
-            InkCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    if let snapshot = session.latestHealthSnapshot ?? session.planning.healthSnapshot,
-                       !snapshot.readings.isEmpty {
-                        HStack(spacing: 8) {
-                            StatChip(icon: "bed.double", label: "睡眠", value: reading(snapshot, .sleepDuration, " h"), tint: WDColor.bamboo)
-                            StatChip(icon: "heart", label: "静息心率", value: reading(snapshot, .restingHeartRate, " bpm"), tint: WDColor.amber)
-                        }
-                    } else {
-                        Text("尚未读取到健康数据。请在“设置 → Apple Health 授权”中连接；授权后这里会显示与徒步相关的指标。")
-                            .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                    }
+            HStack {
+                Label("Apple Health", systemImage: "heart.text.square")
+                    .font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
+                Spacer()
+                Text("Apple Watch / iPhone")
+                    .font(WDFont.caption(10)).foregroundStyle(WDColor.bamboo)
+            }
+
+            if let snapshot = session.latestHealthSnapshot ?? session.planning.healthSnapshot,
+               !snapshot.readings.isEmpty {
+                healthHeartCard(snapshot)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    healthMetricCard(snapshot, metric: .restingHeartRate,
+                                     title: "静息心率", icon: "heart", unit: "bpm", tint: WDColor.amber)
+                    healthMetricCard(snapshot, metric: .heartRateVariability,
+                                     title: "心率变异性", icon: "waveform.path.ecg", unit: "ms", tint: WDColor.bamboo)
+                    healthMetricCard(snapshot, metric: .oxygenSaturation,
+                                     title: "血氧", icon: "lungs.fill", unit: "%", tint: WDColor.bamboo)
+                    healthMetricCard(snapshot, metric: .respiratoryRate,
+                                     title: "呼吸频率", icon: "wind", unit: "次/分", tint: WDColor.mist)
+                    healthMetricCard(snapshot, metric: .sleepDuration,
+                                     title: "最近睡眠", icon: "bed.double.fill", unit: "h", tint: WDColor.mist)
+                    healthMetricCard(snapshot, metric: .vo2Max,
+                                     title: "最大摄氧量", icon: "figure.run", unit: "", tint: WDColor.amber)
+                }
+
+                healthActivityCard(snapshot)
+
+                Text("更新于 \(healthTime(snapshot.capturedAt)) · 行程中每分钟尝试刷新一次")
+                    .font(WDFont.caption(10)).foregroundStyle(WDColor.mist.opacity(0.72))
+            } else {
+                InkCard {
+                    Text("尚未读取到健康数据。请在“设置 → Apple Health 授权”中连接；授权后这里会显示与徒步相关的指标。")
+                        .font(WDFont.caption()).foregroundStyle(WDColor.mist)
                 }
             }
         }
+    }
+
+    private func healthHeartCard(_ snapshot: HealthSnapshot) -> some View {
+        let sample = snapshot.reading(.heartRate)
+            ?? snapshot.reading(.walkingHeartRateAverage)
+            ?? snapshot.reading(.restingHeartRate)
+        let value = sample.map { String(format: "%.0f", $0.value) } ?? "—"
+        let source = sample?.sourceName ?? "Apple Health"
+
+        return InkCard {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().fill(WDColor.cinnabar.opacity(0.12)).frame(width: 56, height: 56)
+                    Circle().stroke(WDColor.cinnabar.opacity(0.25), lineWidth: 1).frame(width: 45, height: 45)
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 22, weight: .medium)).foregroundStyle(WDColor.cinnabar)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("最近心率").font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(value).font(WDFont.mono(32)).foregroundStyle(WDColor.ricePaper)
+                        Text("bpm").font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                    }
+                    Text(sample.map { "\(source) · \(healthTime($0.sampledAt))" } ?? "等待手表同步心率样本")
+                        .font(WDFont.caption(10)).foregroundStyle(WDColor.mist.opacity(0.72))
+                }
+                Spacer()
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 28, weight: .light)).foregroundStyle(WDColor.cinnabar.opacity(0.7))
+            }
+        }
+    }
+
+    private func healthMetricCard(_ snapshot: HealthSnapshot,
+                                  metric: HealthMetric,
+                                  title: String,
+                                  icon: String,
+                                  unit: String,
+                                  tint: Color) -> some View {
+        let sample = snapshot.reading(metric)
+        let value = sample.map { healthValue($0.value, metric: metric) } ?? "—"
+        return InkCard {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(tint)
+                Text(title).font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(value).font(WDFont.mono(18)).foregroundStyle(WDColor.ricePaper)
+                    if !unit.isEmpty {
+                        Text(unit).font(WDFont.caption(9)).foregroundStyle(WDColor.mist)
+                    }
+                }
+                Text(sample.map { healthTime($0.sampledAt) } ?? "暂无样本")
+                    .font(WDFont.caption(9)).foregroundStyle(WDColor.mist.opacity(0.65))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func healthActivityCard(_ snapshot: HealthSnapshot) -> some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 13) {
+                Text("今日活动").font(WDFont.heading(15)).foregroundStyle(WDColor.ricePaper)
+                activityBar(snapshot, metric: .steps, title: "步数", unit: "步", goal: 10_000, tint: WDColor.bamboo)
+                activityBar(snapshot, metric: .activeEnergy, title: "活动能量", unit: "kcal", goal: 600, tint: WDColor.amber)
+                activityBar(snapshot, metric: .exerciseTime, title: "运动时间", unit: "min", goal: 30, tint: WDColor.cinnabar)
+                activityBar(snapshot, metric: .walkingRunningDistance, title: "步行跑步距离", unit: "km",
+                            goal: 8_000, tint: WDColor.mist, divisor: 1_000)
+            }
+        }
+    }
+
+    private func activityBar(_ snapshot: HealthSnapshot,
+                             metric: HealthMetric,
+                             title: String,
+                             unit: String,
+                             goal: Double,
+                             tint: Color,
+                             divisor: Double = 1) -> some View {
+        let rawValue = snapshot.reading(metric)?.value ?? 0
+        let displayed = rawValue / divisor
+        return VStack(spacing: 6) {
+            HStack {
+                Text(title).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                Spacer()
+                Text("\(String(format: divisor == 1 ? "%.0f" : "%.1f", displayed)) \(unit)")
+                    .font(WDFont.mono(11)).foregroundStyle(WDColor.ricePaper)
+            }
+            ProgressView(value: min(max(rawValue / goal, 0), 1))
+                .tint(tint)
+                .background(WDColor.mist.opacity(0.12))
+        }
+    }
+
+    private func healthValue(_ value: Double, metric: HealthMetric) -> String {
+        switch metric {
+        case .oxygenSaturation, .bodyFat, .walkingAsymmetry, .walkingDoubleSupport:
+            return String(format: "%.0f", value <= 1 ? value * 100 : value)
+        case .heartRate, .restingHeartRate, .walkingHeartRateAverage, .respiratoryRate,
+             .heartRateVariability, .vo2Max:
+            return String(format: "%.0f", value)
+        default:
+            return String(format: "%.1f", value)
+        }
+    }
+
+    private func healthTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "今天 HH:mm" : "MM/dd HH:mm"
+        return formatter.string(from: date)
     }
 
     private func tile(_ icon: String, _ title: String, _ value: String, _ note: String) -> some View {
@@ -270,10 +405,6 @@ struct DataTabView: View {
         Rectangle().fill(WDColor.mist.opacity(0.15)).frame(width: 1, height: 34)
     }
 
-    private func reading(_ snapshot: HealthSnapshot, _ metric: HealthMetric, _ suffix: String) -> String {
-        guard let value = snapshot.reading(metric)?.value else { return "—" }
-        return "\(String(format: "%.1f", value))\(suffix)"
-    }
 }
 
 private struct CapabilityDimension: Identifiable {

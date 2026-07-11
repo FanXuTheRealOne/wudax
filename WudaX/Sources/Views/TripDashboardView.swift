@@ -95,6 +95,7 @@ struct TripDashboardView: View {
                 points: routePoints,
                 currentCoordinate: session.location.latestLocation?.coordinate,
                 tracksUserLocation: true,
+                userHeadingDegrees: session.location.headingDegrees,
                 matchedCoordinate: session.routeMatch?.matchedCoordinate,
                 matchConfidence: session.routeMatch?.confidence,
                 isOffRoute: session.routeMatch?.isOffRoute ?? false,
