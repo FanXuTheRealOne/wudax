@@ -5,6 +5,17 @@ import SwiftUI
 // 再点切换为跟随(放大到自己),继续点在两者间循环 —— 两个页面的样式、
 // 点击逻辑与动画过渡完全一致;相机动画由 RouteMapView.updateCamera 统一执行。
 
+/// 定位按钮的循环:任意状态先进概览,概览与跟随之间往复。
+enum LocationFocusCycle {
+    static func next(after mode: RouteMapCameraMode) -> RouteMapCameraMode {
+        switch mode {
+        case .automatic, .route: return .overview
+        case .overview: return .user
+        case .user: return .overview
+        }
+    }
+}
+
 struct MapCameraControls: View {
     @Binding var cameraMode: RouteMapCameraMode
     @Binding var cameraRequestID: Int

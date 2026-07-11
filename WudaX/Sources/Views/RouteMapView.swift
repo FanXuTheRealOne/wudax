@@ -4,6 +4,8 @@ import MapKit
 /// 地图相机只有在用户明确点击聚焦按钮时移动；`.automatic` 保持行中仪表盘的原有跟随行为。
 enum RouteMapCameraMode: Equatable {
     case automatic
+    /// 概览:路线与用户位置一屏同框(定位按钮循环的第一档)。
+    case overview
     case route
     case user
 }
@@ -154,8 +156,14 @@ struct RouteMapView: UIViewRepresentable {
             }
         }
 
-        if let renderer = map.renderer(for: coordinator.polyline!) as? MKPolylineRenderer {
-            renderer.setNeedsDisplay()
+        // 折线重绘只在偏航状态翻转时需要;heading/GPS 高频刷新不得逐帧触发
+        // setNeedsDisplay,否则缩放手势期间整条折线持续重绘造成掉帧。
+        if coordinator.lastRenderedOffRoute != isOffRoute {
+            coordinator.lastRenderedOffRoute = isOffRoute
+            if let renderer = map.renderer(for: coordinator.polyline!) as? MKPolylineRenderer {
+                renderer.strokeColor = isOffRoute ? .systemOrange : UIColor(WDColor.bamboo)
+                renderer.setNeedsDisplay()
+            }
         }
         return coordinator.polyline!
     }
@@ -210,7 +218,17 @@ struct RouteMapView: UIViewRepresentable {
                 coordinator.isFollowSuspendedByGesture = false
             }
 
-            if !coordinator.isFollowSuspendedByGesture {
+            if guideLineToStart, let guide = coordinator.guidePolyline {
+                // 前往起点阶段:首帧/显式定位时把自己与起点旗标一屏收进(缩放动画),
+                // 不启用原生跟随以免相机立刻被拉回用户;之后缩放拖动交给用户。
+                if explicitFocusRequest || !coordinator.hasSetGuideRegion {
+                    map.setUserTrackingMode(.none, animated: false)
+                    map.setRegion(paddedRegion(for: guide.boundingMapRect, scale: 1.6, minDelta: 0.008),
+                                  animated: coordinator.hasSetInitialRegion)
+                    coordinator.hasSetGuideRegion = true
+                    coordinator.hasSetInitialRegion = true
+                }
+            } else if !coordinator.isFollowSuspendedByGesture {
                 if map.userTrackingMode != .follow {
                     map.setUserTrackingMode(.follow, animated: coordinator.hasSetInitialRegion)
                 }
@@ -220,7 +238,8 @@ struct RouteMapView: UIViewRepresentable {
             if map.userLocation.location == nil,
                let currentCoordinate,
                CLLocationCoordinate2DIsValid(currentCoordinate),
-               (explicitFocusRequest || !coordinator.hasSetUserRegion) {
+               (explicitFocusRequest || !coordinator.hasSetUserRegion),
+               !guideLineToStart {
                 map.setRegion(
                     MKCoordinateRegion(center: currentCoordinate,
                                        latitudinalMeters: 1_500,
@@ -235,6 +254,24 @@ struct RouteMapView: UIViewRepresentable {
                 // 带 edgePadding 的 setVisibleMapRect 在零尺寸地图上会退化成全球视野。
                 map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: false)
             }
+            coordinator.hasSetInitialRegion = true
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
+
+        case .overview:
+            // 概览:路线全貌 + 用户位置一屏同框,带缩放过渡动画。
+            let needsFocus = fitRoute || coordinator.lastCameraMode != cameraMode
+                || coordinator.lastCameraRequestID != cameraRequestID
+            guard needsFocus else { return }
+            map.setUserTrackingMode(.none, animated: false)
+            coordinator.isFollowSuspendedByGesture = true
+            var visibleRect = polyline.boundingMapRect
+            if let userCoordinate = map.userLocation.location?.coordinate ?? currentCoordinate,
+               CLLocationCoordinate2DIsValid(userCoordinate) {
+                let point = MKMapPoint(userCoordinate)
+                visibleRect = visibleRect.union(MKMapRect(x: point.x, y: point.y, width: 0, height: 0))
+            }
+            map.setRegion(paddedRegion(for: visibleRect, scale: 1.25), animated: !fitRoute)
             coordinator.hasSetInitialRegion = true
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
@@ -259,6 +296,18 @@ struct RouteMapView: UIViewRepresentable {
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
             if explicitFocusRequest { coordinator.isFollowSuspendedByGesture = false }
+            // 显式点击时先做可见的放大过渡(1.2 km 视野),再交给原生跟随;
+            // 否则已处于 follow 时点击毫无视觉反馈。
+            if explicitFocusRequest,
+               let userCoordinate = map.userLocation.location?.coordinate ?? currentCoordinate,
+               CLLocationCoordinate2DIsValid(userCoordinate) {
+                map.setRegion(
+                    MKCoordinateRegion(center: userCoordinate,
+                                       latitudinalMeters: 1_200,
+                                       longitudinalMeters: 1_200),
+                    animated: true
+                )
+            }
             map.setUserTrackingMode(.follow, animated: true)
             coordinator.hasSetInitialRegion = true
             coordinator.hasSetUserRegion = map.userLocation.location != nil
@@ -281,10 +330,12 @@ struct RouteMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var isOffRoute = false
+        var lastRenderedOffRoute: Bool?
         var lastCameraMode: RouteMapCameraMode?
         var lastCameraRequestID: Int?
         var hasSetInitialRegion = false
         var hasSetUserRegion = false
+        var hasSetGuideRegion = false
         var isFollowSuspendedByGesture = false
         var fallbackHeadingDegrees: CLLocationDirection?
         fileprivate var routeKey: RouteMapRouteKey?
@@ -471,70 +522,6 @@ private struct MapGuideKey: Equatable {
 
     private static func quantized(_ degrees: CLLocationDegrees?) -> CLLocationDegrees? {
         degrees.map { ($0 / 0.0003).rounded() * 0.0003 }
-    }
-}
-
-enum LocationFocusCycle {
-    static func next(after mode: RouteMapCameraMode) -> RouteMapCameraMode {
-        switch mode {
-        case .route, .user:
-            return .automatic
-        case .automatic:
-            return .user
-        }
-    }
-}
-
-// MARK: - 地图相机控制按钮组(行中页与主地图页共用)
-// 「路线聚焦」+「定位循环」:定位按钮第一次点进入自动态，
-// 再点切换为跟随定位；相机动画由 RouteMapView.updateCamera 统一执行。
-struct MapCameraControls: View {
-    @Binding var cameraMode: RouteMapCameraMode
-    @Binding var cameraRequestID: Int
-    /// 点定位按钮时的附加动作(主地图页用来启动定位监听)。
-    var onLocateTapped: (() -> Void)? = nil
-
-    var body: some View {
-        VStack(spacing: 8) {
-            MapControlButton(icon: "arrow.up.left.and.arrow.down.right",
-                             selected: cameraMode == .route) {
-                cameraMode = .route
-                cameraRequestID += 1
-                Haptics.tap()
-            }
-            .accessibilityLabel("路线聚焦")
-
-            MapControlButton(icon: "location.fill",
-                             selected: cameraMode != .route) {
-                onLocateTapped?()
-                cameraMode = LocationFocusCycle.next(after: cameraMode)
-                cameraRequestID += 1
-                Haptics.tap()
-            }
-            .accessibilityLabel("定位:概览与跟随循环切换")
-        }
-    }
-}
-
-/// 圆形地图控制按钮(与行中页原样式一致)。
-struct MapControlButton: View {
-    let icon: String
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(selected ? WDColor.onDark : WDColor.ricePaper)
-                .frame(width: 42, height: 42)
-                .background(
-                    Circle().fill(selected ? WDColor.ink : WDColor.deepMoss.opacity(0.96))
-                        .overlay(Circle().stroke(WDColor.line.opacity(selected ? 0 : 0.8), lineWidth: 1))
-                        .shadow(color: WDColor.ink.opacity(0.12), radius: 8, y: 4)
-                )
-        }
-        .buttonStyle(.plain)
     }
 }
 

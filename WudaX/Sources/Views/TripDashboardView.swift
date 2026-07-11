@@ -1,6 +1,13 @@
 import SwiftUI
 import MapKit
 
+/// 运动平均配速格式化;距离过短时显示占位,避免出现虚假配速。
+func formatWorkoutPace(distanceKm: Double, elapsedHours: Double) -> String {
+    guard distanceKm >= 0.05, elapsedHours > 0 else { return "—" }
+    let totalSeconds = Int((elapsedHours * 3600 / distanceKm).rounded())
+    return String(format: "%d′%02d″/km", totalSeconds / 60, totalSeconds % 60)
+}
+
 // MARK: - 阶段三:实时行程页 —— 全屏大地图 + 常驻计时/剩余距离面板
 // 出发后先引导前往路线起点(虚线),到达起点自动开始计时与记录;
 // 记录中常驻显示计时、剩余公里、已行进,详情卡片收进 sheet。
@@ -164,16 +171,7 @@ struct TripDashboardView: View {
             VStack(spacing: 8) {
                 agentButton
                 mapLayerMenu
-                mapControlButton("arrow.up.left.and.arrow.down.right", selected: cameraMode == .route) {
-                    cameraMode = .route
-                    cameraRequestID += 1
-                    Haptics.tap()
-                }
-                mapControlButton("location.fill", selected: cameraMode == .automatic) {
-                    cameraMode = .automatic
-                    cameraRequestID += 1
-                    Haptics.tap()
-                }
+                MapCameraControls(cameraMode: $cameraMode, cameraRequestID: $cameraRequestID)
             }
         }
     }
@@ -263,21 +261,6 @@ struct TripDashboardView: View {
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.amber.opacity(0.4), lineWidth: 1))
                     .shadow(color: WDColor.ink.opacity(0.12), radius: 12, y: 5)
             )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func mapControlButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(selected ? WDColor.onDark : WDColor.ricePaper)
-                .frame(width: 42, height: 42)
-                .background(
-                    Circle().fill(selected ? WDColor.ink : WDColor.deepMoss.opacity(0.96))
-                        .overlay(Circle().stroke(WDColor.line.opacity(selected ? 0 : 0.8), lineWidth: 1))
-                        .shadow(color: WDColor.ink.opacity(0.12), radius: 8, y: 4)
-                )
         }
         .buttonStyle(.plain)
     }
@@ -441,15 +424,6 @@ struct TripDashboardView: View {
         guard session.hikeStartDate != nil else { return "00:00:00" }
         let seconds = max(Int(session.activeElapsedHours(at: now) * 3600), 0)
         return String(format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-    }
-
-    private func formatWorkoutPace(distanceKm: Double, elapsedHours: Double) -> String {
-        guard distanceKm > 0.02, elapsedHours > 0 else { return "—" }
-        let paceSecondsPerKm = elapsedHours * 3600 / distanceKm
-        guard paceSecondsPerKm.isFinite, paceSecondsPerKm < 99 * 60 else { return "—" }
-        let minutes = Int(paceSecondsPerKm) / 60
-        let seconds = Int(paceSecondsPerKm) % 60
-        return String(format: "%d'%02d''", minutes, seconds)
     }
 
     private var remainingKmText: String {

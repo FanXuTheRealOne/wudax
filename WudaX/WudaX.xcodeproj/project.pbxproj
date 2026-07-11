@@ -12,6 +12,7 @@
 		0518EE069DC528B2CA876429 /* RouteMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D778BB42F93867C5D5749816 /* RouteMapView.swift */; };
 		06DFAAFC4B0D5879E6ED8315 /* RouteShapeThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = A216770BAAEB9A801A5E0612 /* RouteShapeThumbnail.swift */; };
 		0711D7131E1786081B68285C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F1141EBAF7A5AE50F06200 /* Models.swift */; };
+		0B6E1CA3F745E3732F119252 /* MapCameraControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D483220613519C788BA87AB /* MapCameraControls.swift */; };
 		1089709ED65869400F58B7E5 /* AgentDataBusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 953E98BB2688EDB4A564A9F7 /* AgentDataBusTests.swift */; };
 		16520A2289C6F7F237B2EF55 /* TripTrackRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D030A9E2654D9DD4113D3BC4 /* TripTrackRecorder.swift */; };
 		19D02CAF122E24927D2E7032 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827403BEC8A5090E492B39E7 /* ChatView.swift */; };
@@ -119,6 +120,7 @@
 		65576A53A4EB3E4062908411 /* BudgetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetCardView.swift; sourceTree = "<group>"; };
 		656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningChatView.swift; sourceTree = "<group>"; };
 		688283405FC46E87E9228E71 /* BudgetCardViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetCardViewTests.swift; sourceTree = "<group>"; };
+		6D483220613519C788BA87AB /* MapCameraControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCameraControls.swift; sourceTree = "<group>"; };
 		765D642CF7D61EFB09E2A38D /* TripTrackRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackRecorderTests.swift; sourceTree = "<group>"; };
 		77841FBD00C8403C9AE8D748 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7EF8007B88320F8B16591338 /* WudaXTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WudaXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -300,6 +302,7 @@
 				EAC0C2F521D68EE3EBB95E1F /* DataTabView.swift */,
 				02B25E221098169C67365353 /* ExoShowcaseView.swift */,
 				F7F4F868B3B84F458B6025F8 /* HomeView.swift */,
+				6D483220613519C788BA87AB /* MapCameraControls.swift */,
 				313E3B037B3A601F25CDAAD4 /* MapTabView.swift */,
 				656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */,
 				5A5321727695AF2A56520A5B /* RetreatDecisionView.swift */,
@@ -547,6 +550,7 @@
 				DBBB03FB537B343E1BE479BA /* HomeView.swift in Sources */,
 				C771352D57038C4FD145A938 /* LocalLLMService.swift in Sources */,
 				49F640D85E3FC4B1D81040D0 /* LocationService.swift in Sources */,
+				0B6E1CA3F745E3732F119252 /* MapCameraControls.swift in Sources */,
 				1A11EB608474C2ABB7C75374 /* MapTabView.swift in Sources */,
 				0711D7131E1786081B68285C /* Models.swift in Sources */,
 				9DA2078002B5EDDD70D685FA /* NotificationService.swift in Sources */,

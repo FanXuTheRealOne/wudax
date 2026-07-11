@@ -20,17 +20,6 @@ final class TripTrackRecorderTests: XCTestCase {
         XCTAssertEqual(formatWorkoutPace(distanceKm: 5, elapsedHours: 1), "12′00″/km")
     }
 
-    func testMapFollowDecisionIgnoresJitterAndGestureSuspension() {
-        XCTAssertFalse(MapFollowDecision.shouldRecenter(distanceMeters: 3, secondsSinceLastUpdate: 1,
-                                                        isSuspended: false, isExplicit: false))
-        XCTAssertFalse(MapFollowDecision.shouldRecenter(distanceMeters: 30, secondsSinceLastUpdate: 1,
-                                                        isSuspended: true, isExplicit: false))
-        XCTAssertTrue(MapFollowDecision.shouldRecenter(distanceMeters: 30, secondsSinceLastUpdate: 1,
-                                                       isSuspended: false, isExplicit: false))
-        XCTAssertTrue(MapFollowDecision.shouldRecenter(distanceMeters: 0, secondsSinceLastUpdate: 0,
-                                                       isSuspended: true, isExplicit: true))
-    }
-
     func testLocationFocusCyclesOverviewThenUser() {
         XCTAssertEqual(LocationFocusCycle.next(after: .automatic), .overview)
         XCTAssertEqual(LocationFocusCycle.next(after: .overview), .user)

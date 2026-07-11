@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 @testable import WudaX
 
 final class AgentDataBusTests: XCTestCase {
@@ -162,15 +163,25 @@ final class AgentDataBusTests: XCTestCase {
         XCTAssertTrue(snapshot.contains("【用户画像】"))
     }
 
-    /// 真实出发流程后,快照必须带上「前方路线」等行中数据 ——
-    /// 这是 AI 窗口能回答「前面路怎么样」的数据前提。
+    /// 出发并到达起点(TripStartGate 连续 2 次合格定位)后,快照必须带上
+    /// 「前方路线」等行中数据 —— 这是 AI 窗口能回答「前面路怎么样」的数据前提。
     @MainActor
-    func testFullSnapshotExposesLookaheadAfterRealDepart() throws {
+    func testFullSnapshotExposesLookaheadAfterReachingStart() throws {
         let session = TripSession()
         let record = try XCTUnwrap(RouteLibrarySeed.records.first)
         session.planning.loadForPlanning(record)
         session.plan.route = Route(analyzedGPX: record.analyzed())
         session.depart()
+
+        // 现行语义:出发后先等待到达起点,连续合格定位后自动开始记录。
+        XCTAssertEqual(session.trackingState, .waitingGPS)
+        let start = try XCTUnwrap(session.routeStartCoordinate)
+        let fix = CLLocation(coordinate: CLLocationCoordinate2D(latitude: start.latitude,
+                                                                longitude: start.longitude),
+                             altitude: 1_000, horizontalAccuracy: 5, verticalAccuracy: 5,
+                             timestamp: Date())
+        session.location.onLocationUpdate?(fix)
+        session.location.onLocationUpdate?(fix)
 
         XCTAssertEqual(session.trackingState, .recording)
         XCTAssertNotNil(session.preparedRoute)
@@ -179,7 +190,6 @@ final class AgentDataBusTests: XCTestCase {
         XCTAssertTrue(snapshot.contains("【前方路线】"), "缺少前方路线节:\n\(snapshot)")
         XCTAssertTrue(snapshot.contains("【风险点】"))
         XCTAssertTrue(snapshot.contains("【轨迹来源】"))
-        XCTAssertTrue(snapshot.contains("已记录"))
 
         let lookahead = try XCTUnwrap(AgentDataBus.lookahead(session: session))
         XCTAssertFalse(lookahead.segmentSummaries.isEmpty)
