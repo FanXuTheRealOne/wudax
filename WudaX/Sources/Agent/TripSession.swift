@@ -289,8 +289,7 @@ final class TripSession: ObservableObject {
         Task {
             _ = await notifications.requestAuthorization()
             // 行中实时读取手表 / 苹果健康数据
-            _ = await planning.requestHealthAuthorization()
-            latestHealthSnapshot = planning.healthSnapshot
+            _ = await connectAppleHealth()
         }
         startMonitoring()
     }
@@ -314,6 +313,20 @@ final class TripSession: ObservableObject {
         persistTrip()
         reviewEntries = SampleData.reviewQuestions
         withAnimation { phase = .home }
+    }
+
+    @discardableResult
+    func connectAppleHealth() async -> HealthSnapshot? {
+        _ = await planning.requestHealthAuthorization()
+        latestHealthSnapshot = planning.healthSnapshot
+        return latestHealthSnapshot
+    }
+
+    func refreshAppleHealthAccess() async {
+        let state = await planning.refreshHealthAuthorizationState()
+        guard state == .granted else { return }
+        await planning.refreshHealthSnapshot()
+        latestHealthSnapshot = planning.healthSnapshot
     }
 
     // MARK: 行中监测：定位事件 + 前台最多每 30 秒一次规则重算

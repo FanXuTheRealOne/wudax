@@ -238,7 +238,7 @@ struct DataTabView: View {
                             StatChip(icon: "heart", label: "静息心率", value: reading(snapshot, .restingHeartRate, " bpm"), tint: WDColor.amber)
                         }
                     } else {
-                        Text("尚未读取到健康数据。在行前规划中连接 Apple Health 后,这里会显示与徒步相关的指标。")
+                        Text("尚未读取到健康数据。请在“设置 → Apple Health 授权”中连接；授权后这里会显示与徒步相关的指标。")
                             .font(WDFont.caption()).foregroundStyle(WDColor.mist)
                     }
                 }

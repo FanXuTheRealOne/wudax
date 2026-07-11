@@ -5,6 +5,9 @@ import UIKit
 struct SettingsTabView: View {
     @EnvironmentObject var session: TripSession
     @State private var showExo = false
+    @State private var isRequestingHealth = false
+    @State private var showHealthResult = false
+    @State private var healthResultMessage = ""
 
     var body: some View {
         ZStack {
@@ -49,6 +52,14 @@ struct SettingsTabView: View {
             }
         }
         .sheet(isPresented: $showExo) { ExoShowcaseView() }
+        .alert("Apple Health", isPresented: $showHealthResult) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(healthResultMessage)
+        }
+        .task {
+            await session.refreshAppleHealthAccess()
+        }
     }
 
     private var header: some View {
@@ -63,9 +74,8 @@ struct SettingsTabView: View {
         InkCard {
             VStack(spacing: 0) {
                 row(icon: "heart.text.square", title: "Apple Health 授权",
-                    value: session.planning.healthKit.authorizationState == .granted ? "已连接" : "去设置") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    UIApplication.shared.open(url)
+                    value: healthAccessValue) {
+                    requestAppleHealthAccess()
                 }
                 Divider().overlay(WDColor.mist.opacity(0.12)).padding(.vertical, 4)
                 row(icon: "bell.badge", title: "通知权限", value: "去设置") {
@@ -78,6 +88,40 @@ struct SettingsTabView: View {
                     UIApplication.shared.open(url)
                 }
             }
+        }
+    }
+
+    private var healthAccessValue: String {
+        if isRequestingHealth { return "请求中" }
+        switch session.planning.healthKit.authorizationState {
+        case .notDetermined: return "连接"
+        case .requesting: return "请求中"
+        case .unavailable: return "此设备不可用"
+        case .denied: return "授权失败"
+        case .granted:
+            let count = (session.latestHealthSnapshot ?? session.planning.healthSnapshot)?.readings.count ?? 0
+            return count > 0 ? "已读取 \(count) 项" : "已请求 · 无数据"
+        }
+    }
+
+    private func requestAppleHealthAccess() {
+        guard !isRequestingHealth else { return }
+        isRequestingHealth = true
+        Task {
+            let snapshot = await session.connectAppleHealth()
+            isRequestingHealth = false
+
+            if session.planning.healthKit.authorizationState == .unavailable {
+                healthResultMessage = "当前设备不支持 HealthKit。请使用已登录 Apple ID 的真实 iPhone 测试。"
+            } else if let error = session.planning.healthKit.lastError,
+                      session.planning.healthKit.authorizationState == .denied {
+                healthResultMessage = "HealthKit 授权失败：\(error)"
+            } else if let snapshot, !snapshot.readings.isEmpty {
+                healthResultMessage = "已从 Apple Health 读取 \(snapshot.readings.count) 项健康指标。"
+            } else {
+                healthResultMessage = "权限请求已完成，但没有可读数据。请打开“健康”App → 右上角头像 → 隐私 → App → WUDAX，开启需要读取的健康类别，并确认健康 App 中已有相关数据。"
+            }
+            showHealthResult = true
         }
     }
 

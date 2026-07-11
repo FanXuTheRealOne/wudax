@@ -34,6 +34,13 @@ final class PlanningCoordinator: ObservableObject {
 
     private let parser = GPXParser()
     private let analyzer = GPXAnalyzer()
+    private var healthKitCancellable: AnyCancellable?
+
+    init() {
+        healthKitCancellable = healthKit.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
 
     var canImportGPX: Bool { stage != .idle }
     var experienceComplete: Bool { experience.isComplete }
@@ -136,6 +143,10 @@ final class PlanningCoordinator: ObservableObject {
 
     func refreshHealthSnapshot() async {
         healthSnapshot = await healthKit.fetchSnapshot()
+    }
+
+    func refreshHealthAuthorizationState() async -> HealthKitService.AuthorizationState {
+        await healthKit.refreshAuthorizationState()
     }
 
     private func addAssistant(_ text: String, card: ChatItem.Card? = nil) { chat.append(.init(role: .assistant, text: text, card: card)) }

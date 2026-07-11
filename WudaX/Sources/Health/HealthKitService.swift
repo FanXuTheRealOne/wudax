@@ -55,6 +55,34 @@ final class HealthKitService: ObservableObject {
         return authorizationState
     }
 
+    /// 同步系统是否还需要展示 HealthKit 权限页。
+    /// 注意：出于隐私保护，HealthKit 不会告诉 App 某项“读取权限”是否被拒绝。
+    func refreshAuthorizationState() async -> AuthorizationState {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            authorizationState = .unavailable
+            return .unavailable
+        }
+        do {
+            let status = try await authorizationRequestStatus()
+            switch status {
+            case .shouldRequest:
+                authorizationState = .notDetermined
+            case .unnecessary:
+                authorizationState = .granted
+                startObservers()
+            case .unknown:
+                authorizationState = .notDetermined
+            @unknown default:
+                authorizationState = .notDetermined
+            }
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+            authorizationState = .denied
+        }
+        return authorizationState
+    }
+
     func fetchSnapshot(asOf date: Date = Date()) async -> HealthSnapshot {
         guard HKHealthStore.isHealthDataAvailable(), authorizationState == .granted else {
             let snapshot = HealthSnapshot(capturedAt: date, readings: [:], unavailableMetrics: Set(HealthMetric.allCases), authorizationGranted: false)
@@ -118,6 +146,18 @@ final class HealthKitService: ObservableObject {
     func stopObservers() {
         observerQueries.forEach(store.stop)
         observerQueries.removeAll()
+    }
+
+    private func authorizationRequestStatus() async throws -> HKAuthorizationRequestStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            store.getRequestStatusForAuthorization(toShare: [], read: requestedTypes) { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: status)
+                }
+            }
+        }
     }
 
     private func startObservers() {
