@@ -24,6 +24,12 @@
   <img src="docs/images/app/data.jpg" alt="WUDAX 疲劳档案" width="23%" />
 </p>
 
+## 产品演示
+
+<video src="assets/video/wudax-agent-demo.mp4" controls playsinline preload="metadata" width="100%">
+  你的浏览器不支持内嵌视频，请<a href="assets/video/wudax-agent-demo.mp4">直接打开演示视频</a>。
+</video>
+
 ---
 
 ## WUDAX 是什么
