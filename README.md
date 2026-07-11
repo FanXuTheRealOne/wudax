@@ -26,9 +26,9 @@
 
 ## 产品演示
 
-<video src="assets/video/wudax-agent-demo.mp4" controls playsinline preload="metadata" width="100%">
-  你的浏览器不支持内嵌视频，请<a href="assets/video/wudax-agent-demo.mp4">直接打开演示视频</a>。
-</video>
+[![WUDAX 端侧 Agent 产品演示](assets/video/wudax-agent-demo.gif)](assets/video/wudax-agent-demo.mp4)
+
+动态预览会在 README 中直接播放；点击画面可打开带声音的 MP4 原片。
 
 ---
 
