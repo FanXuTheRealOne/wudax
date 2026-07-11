@@ -3,11 +3,17 @@ import Combine
 
 @MainActor
 final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
+    enum MonitoringMode {
+        case browsing
+        case activeHike
+    }
+
     enum AuthorizationState: Equatable {
         case notDetermined, whenInUse, always, denied, restricted
     }
 
     @Published private(set) var authorizationState: AuthorizationState = .notDetermined
+    @Published private(set) var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy
     @Published private(set) var latestLocation: CLLocation?
     private(set) var latestHeading: CLHeading?
     @Published private(set) var headingDegrees: CLLocationDirection?
@@ -15,16 +21,18 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
     var onLocationUpdate: ((CLLocation) -> Void)?
 
     private let manager = CLLocationManager()
+    private var monitoringMode: MonitoringMode = .browsing
 
     override init() {
         super.init()
         manager.delegate = self
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 10
+        manager.distanceFilter = 5
         // 地图导航需要连续朝向；后续用低通滤波消除罗盘抖动，而不是粗粒度丢弃更新。
         manager.headingFilter = kCLHeadingFilterNone
         updateAuthorizationState(manager.authorizationStatus)
+        accuracyAuthorization = manager.accuracyAuthorization
     }
 
     func requestPermission() {
@@ -36,22 +44,36 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
         manager.requestAlwaysAuthorization()
     }
 
-    func startMonitoring() {
+    func startMonitoring(mode: MonitoringMode = .browsing) {
+        monitoringMode = mode
         requestPermission()
         guard manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways else { return }
+        configureLocationUpdates(for: mode)
         let hasBackgroundLocationMode = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
         let canUseBackgroundLocation = Self.shouldEnableBackgroundLocationUpdates(
             authorizationStatus: manager.authorizationStatus,
             hasBackgroundLocationMode: hasBackgroundLocationMode?.contains("location") == true
         )
         manager.allowsBackgroundLocationUpdates = canUseBackgroundLocation
-        manager.pausesLocationUpdatesAutomatically = false
-        manager.showsBackgroundLocationIndicator = true
+        manager.showsBackgroundLocationIndicator = canUseBackgroundLocation
         manager.startUpdatingLocation()
         if CLLocationManager.headingAvailable() {
             manager.startUpdatingHeading()
         }
         isMonitoring = true
+    }
+
+    private func configureLocationUpdates(for mode: MonitoringMode) {
+        switch mode {
+        case .browsing:
+            manager.desiredAccuracy = kCLLocationAccuracyBest
+            manager.distanceFilter = 5
+            manager.pausesLocationUpdatesAutomatically = true
+        case .activeHike:
+            manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+            manager.distanceFilter = 1
+            manager.pausesLocationUpdatesAutomatically = false
+        }
     }
 
     nonisolated static func shouldEnableBackgroundLocationUpdates(
@@ -69,16 +91,22 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         updateAuthorizationState(manager.authorizationStatus)
+        accuracyAuthorization = manager.accuracyAuthorization
         if manager.authorizationStatus == .authorizedWhenInUse {
             manager.requestAlwaysAuthorization()
         }
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-            startMonitoring()
+            startMonitoring(mode: monitoringMode)
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        let now = Date()
+        guard let location = locations.reversed().first(where: {
+            $0.horizontalAccuracy >= 0 &&
+            now.timeIntervalSince($0.timestamp) <= 15 &&
+            CLLocationCoordinate2DIsValid($0.coordinate)
+        }) else { return }
         latestLocation = location
         onLocationUpdate?(location)
     }

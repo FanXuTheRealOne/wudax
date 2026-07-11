@@ -259,7 +259,7 @@ final class TripSession: ObservableObject {
         // 没有可用路线(调试直跳等)时无起点可等,立即开始记录。
         if preparedRoute == nil { beginRecording() }
         withAnimation { phase = .inTrip }
-        location.startMonitoring()
+        location.startMonitoring(mode: .activeHike)
         Task {
             _ = await notifications.requestAuthorization()
             // 行中实时读取手表 / 苹果健康数据

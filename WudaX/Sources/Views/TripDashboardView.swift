@@ -10,6 +10,7 @@ struct TripDashboardView: View {
     @EnvironmentObject var agent: WudaXAgent
     @State private var cameraMode: RouteMapCameraMode = .automatic
     @State private var cameraRequestID = 0
+    @State private var mapLayer: RouteMapLayer = .standard
     @State private var showDetailSheet = false
     @State private var showAgentSheet = false
     @State private var showEndConfirm = false
@@ -101,7 +102,8 @@ struct TripDashboardView: View {
                 cameraMode: cameraMode,
                 cameraRequestID: cameraRequestID,
                 showsEndpointFlags: true,
-                guideLineToStart: isToStart
+                guideLineToStart: isToStart,
+                mapLayer: mapLayer
             )
             .ignoresSafeArea()
         } else {
@@ -161,6 +163,7 @@ struct TripDashboardView: View {
             Spacer()
             VStack(spacing: 8) {
                 agentButton
+                mapLayerMenu
                 mapControlButton("arrow.up.left.and.arrow.down.right", selected: cameraMode == .route) {
                     cameraMode = .route
                     cameraRequestID += 1
@@ -173,6 +176,30 @@ struct TripDashboardView: View {
                 }
             }
         }
+    }
+
+    private var mapLayerMenu: some View {
+        Menu {
+            ForEach(RouteMapLayer.allCases) { layer in
+                Button {
+                    mapLayer = layer
+                    Haptics.tap()
+                } label: {
+                    Label(layer.title, systemImage: layer.symbolName)
+                }
+            }
+        } label: {
+            Image(systemName: "square.3.layers.3d.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(WDColor.ricePaper)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle().fill(WDColor.deepMoss.opacity(0.96))
+                        .overlay(Circle().stroke(WDColor.line.opacity(0.8), lineWidth: 1))
+                        .shadow(color: WDColor.ink.opacity(0.12), radius: 8, y: 4)
+                )
+        }
+        .accessibilityLabel("切换地图图层，当前为\(mapLayer.title)")
     }
 
     /// 行中 AI 窗口入口:未读播报数角标。
@@ -349,10 +376,20 @@ struct TripDashboardView: View {
 
     private var waitingStats: some View {
         HStack(spacing: 12) {
-            ProgressView().tint(WDColor.bamboo)
+            if session.location.accuracyAuthorization == .reducedAccuracy {
+                Image(systemName: "location.slash.fill").foregroundStyle(WDColor.amber)
+            } else {
+                ProgressView().tint(WDColor.bamboo)
+            }
             VStack(alignment: .leading, spacing: 3) {
-                Text("等待第一个可用 GPS 定位").font(WDFont.body(14).weight(.medium)).foregroundStyle(WDColor.ricePaper)
-                Text("路线已在本地准备;定位后开始引导").font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                Text(session.location.accuracyAuthorization == .reducedAccuracy
+                     ? "请在系统设置中开启精确位置"
+                     : "等待第一个可用 GPS 定位")
+                    .font(WDFont.body(14).weight(.medium)).foregroundStyle(WDColor.ricePaper)
+                Text(session.location.accuracyAuthorization == .reducedAccuracy
+                     ? "关闭精确位置会明显降低路线匹配与偏航判断精度"
+                     : "路线已在本地准备;定位后开始引导")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
             }
             Spacer()
         }
