@@ -44,9 +44,8 @@ enum RouteMapLayer: String, CaseIterable, Identifiable {
 struct RouteMapView: UIViewRepresentable {
     let points: [GPXTrackPoint]
     var currentCoordinate: CLLocationCoordinate2D?
-    var userHeadingDegrees: CLLocationDirection?
+    var tracksUserLocation = false
     var matchedCoordinate: RouteCoordinate?
-    var horizontalAccuracyMeters: Double?
     var matchConfidence: RouteMatchConfidence?
     var isOffRoute = false
     var cameraMode: RouteMapCameraMode = .automatic
@@ -63,7 +62,9 @@ struct RouteMapView: UIViewRepresentable {
         let map = MKMapView(frame: .zero)
         map.delegate = context.coordinator
         map.mapType = mapLayer.mapType
-        map.showsUserLocation = false
+        // 让 MapKit 自己管理 MKUserLocation，避免把 Core Location 坐标作为普通
+        // annotation 重画后与中国区 Apple 底图产生显示链路差异。
+        map.showsUserLocation = tracksUserLocation
         map.showsCompass = false
         map.showsScale = false
         map.isRotateEnabled = false
@@ -80,9 +81,18 @@ struct RouteMapView: UIViewRepresentable {
         update(map, context: context, fitRoute: context.coordinator.polyline == nil)
     }
 
+    static func dismantleUIView(_ map: MKMapView, coordinator: Coordinator) {
+        map.setUserTrackingMode(.none, animated: false)
+        map.showsUserLocation = false
+        map.delegate = nil
+    }
+
     private func update(_ map: MKMapView, context: Context, fitRoute: Bool) {
         if map.mapType != mapLayer.mapType {
             map.mapType = mapLayer.mapType
+        }
+        if map.showsUserLocation != tracksUserLocation {
+            map.showsUserLocation = tracksUserLocation
         }
 
         let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
@@ -90,9 +100,7 @@ struct RouteMapView: UIViewRepresentable {
 
         let polyline = syncRoute(map, coordinates: coordinates, coordinator: context.coordinator)
         _ = syncGuideLine(map, coordinates: coordinates, coordinator: context.coordinator)
-        syncAccuracyCircle(map, coordinator: context.coordinator)
         syncMatchedAnnotation(map, coordinator: context.coordinator)
-        syncUserAnnotation(map, coordinator: context.coordinator)
         updateCamera(map, polyline: polyline, coordinator: context.coordinator, fitRoute: fitRoute)
     }
 
@@ -159,23 +167,6 @@ struct RouteMapView: UIViewRepresentable {
         return guidePolyline
     }
 
-    private func syncAccuracyCircle(_ map: MKMapView, coordinator: Coordinator) {
-        let key = MapAccuracyKey(coordinate: currentCoordinate, accuracyMeters: horizontalAccuracyMeters)
-        guard coordinator.accuracyKey != key else { return }
-        if let circle = coordinator.accuracyCircle { map.removeOverlay(circle) }
-        coordinator.accuracyCircle = nil
-        coordinator.accuracyKey = key
-
-        if let currentCoordinate,
-           let horizontalAccuracyMeters,
-           horizontalAccuracyMeters.isFinite,
-           horizontalAccuracyMeters > 0 {
-            let circle = MKCircle(center: currentCoordinate, radius: min(horizontalAccuracyMeters, 500))
-            map.addOverlay(circle)
-            coordinator.accuracyCircle = circle
-        }
-    }
-
     private func syncMatchedAnnotation(_ map: MKMapView, coordinator: Coordinator) {
         guard let matchedCoordinate else {
             if let annotation = coordinator.matchedAnnotation { map.removeAnnotation(annotation) }
@@ -201,61 +192,52 @@ struct RouteMapView: UIViewRepresentable {
         }
     }
 
-    private func syncUserAnnotation(_ map: MKMapView, coordinator: Coordinator) {
-        guard let currentCoordinate else {
-            if let annotation = coordinator.userAnnotation { map.removeAnnotation(annotation) }
-            coordinator.userAnnotation = nil
-            return
-        }
-
-        if let annotation = coordinator.userAnnotation {
-            annotation.coordinate = currentCoordinate
-            annotation.headingDegrees = userHeadingDegrees
-            (map.view(for: annotation) as? UserNavigationPuckView)?.update(headingDegrees: userHeadingDegrees)
-        } else {
-            let annotation = UserNavigationAnnotation(coordinate: currentCoordinate, headingDegrees: userHeadingDegrees)
-            coordinator.userAnnotation = annotation
-            map.addAnnotation(annotation)
-        }
-    }
-
     private func updateCamera(_ map: MKMapView,
                               polyline: MKPolyline,
                               coordinator: Coordinator,
                               fitRoute: Bool) {
+        guard tracksUserLocation else {
+            let needsFocus = fitRoute || !coordinator.hasSetInitialRegion
+                || coordinator.lastCameraMode != cameraMode
+                || coordinator.lastCameraRequestID != cameraRequestID
+            guard needsFocus else { return }
+            map.setUserTrackingMode(.none, animated: false)
+            map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: !fitRoute)
+            coordinator.hasSetInitialRegion = true
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
+            return
+        }
+
         switch cameraMode {
         case .automatic:
             let explicitFocusRequest = coordinator.lastCameraMode != cameraMode
                 || coordinator.lastCameraRequestID != cameraRequestID
             if explicitFocusRequest {
                 coordinator.isFollowSuspendedByGesture = false
-                if currentCoordinate == nil { coordinator.hasSetUserRegion = false }
             }
 
-            if let currentCoordinate,
-               CLLocationCoordinate2DIsValid(currentCoordinate) {
-                let previousLocation = coordinator.lastFollowCoordinate.map {
-                    CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+            if !coordinator.isFollowSuspendedByGesture {
+                if map.userTrackingMode != .follow {
+                    map.setUserTrackingMode(.follow, animated: coordinator.hasSetInitialRegion)
                 }
-                let currentLocation = CLLocation(latitude: currentCoordinate.latitude,
-                                                 longitude: currentCoordinate.longitude)
-                let movedEnough = previousLocation.map { currentLocation.distance(from: $0) >= 8 } ?? true
+                coordinator.hasSetUserRegion = map.userLocation.location != nil
+            }
 
-                if explicitFocusRequest || !coordinator.hasSetUserRegion {
-                    map.setRegion(
-                        MKCoordinateRegion(center: currentCoordinate,
-                                           latitudinalMeters: 1_500,
-                                           longitudinalMeters: 1_500),
-                        animated: coordinator.hasSetInitialRegion
-                    )
-                    coordinator.hasSetUserRegion = true
-                    coordinator.lastFollowCoordinate = currentCoordinate
-                } else if !coordinator.isFollowSuspendedByGesture && movedEnough {
-                    // 仅在 GPS 位置真正移动时更新中心，罗盘高频刷新不会再触发地图动画。
-                    map.setCenter(currentCoordinate, animated: false)
-                    coordinator.lastFollowCoordinate = currentCoordinate
-                }
-            } else if !coordinator.hasSetInitialRegion {
+            if map.userLocation.location == nil,
+               let currentCoordinate,
+               CLLocationCoordinate2DIsValid(currentCoordinate),
+               (explicitFocusRequest || !coordinator.hasSetUserRegion) {
+                map.setRegion(
+                    MKCoordinateRegion(center: currentCoordinate,
+                                       latitudinalMeters: 1_500,
+                                       longitudinalMeters: 1_500),
+                    animated: coordinator.hasSetInitialRegion
+                )
+                coordinator.hasSetUserRegion = true
+            } else if map.userLocation.location == nil,
+                      currentCoordinate == nil,
+                      !coordinator.hasSetInitialRegion {
                 // 尚无定位:先展示整条路线。setRegion 在布局完成前调用也能正确生效,
                 // 带 edgePadding 的 setVisibleMapRect 在零尺寸地图上会退化成全球视野。
                 map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: false)
@@ -268,31 +250,25 @@ struct RouteMapView: UIViewRepresentable {
             let needsFocus = fitRoute || coordinator.lastCameraMode != cameraMode
                 || coordinator.lastCameraRequestID != cameraRequestID
             guard needsFocus else { return }
+            map.setUserTrackingMode(.none, animated: false)
+            coordinator.isFollowSuspendedByGesture = true
             map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: !fitRoute)
             coordinator.hasSetInitialRegion = true
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
 
         case .user:
-            let needsFocus = coordinator.lastCameraMode != cameraMode
+            let explicitFocusRequest = coordinator.lastCameraMode != cameraMode
                 || coordinator.lastCameraRequestID != cameraRequestID
-                || !coordinator.hasSetUserRegion
+            let needsFocus = explicitFocusRequest
+                || (!coordinator.isFollowSuspendedByGesture && map.userTrackingMode != .follow)
             guard needsFocus else { return }
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
-            guard let currentCoordinate,
-                  CLLocationCoordinate2DIsValid(currentCoordinate) else {
-                coordinator.hasSetUserRegion = false
-                return
-            }
-            map.setRegion(
-                MKCoordinateRegion(center: currentCoordinate,
-                                   latitudinalMeters: 1_200,
-                                   longitudinalMeters: 1_200),
-                animated: true
-            )
+            if explicitFocusRequest { coordinator.isFollowSuspendedByGesture = false }
+            map.setUserTrackingMode(.follow, animated: true)
             coordinator.hasSetInitialRegion = true
-            coordinator.hasSetUserRegion = true
+            coordinator.hasSetUserRegion = map.userLocation.location != nil
         }
     }
 
@@ -317,20 +293,16 @@ struct RouteMapView: UIViewRepresentable {
         var hasSetInitialRegion = false
         var hasSetUserRegion = false
         var isFollowSuspendedByGesture = false
-        var lastFollowCoordinate: CLLocationCoordinate2D?
         fileprivate var routeKey: RouteMapRouteKey?
         fileprivate var polyline: MKPolyline?
         fileprivate var guideKey: MapGuideKey?
         fileprivate var guidePolyline: GuidePolyline?
-        fileprivate var accuracyKey: MapAccuracyKey?
-        fileprivate var accuracyCircle: MKCircle?
         fileprivate var startAnnotation: RouteEndpointAnnotation?
         fileprivate var endAnnotation: RouteEndpointAnnotation?
         fileprivate var matchedAnnotation: MatchedRouteAnnotation?
-        fileprivate var userAnnotation: UserNavigationAnnotation?
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            guard lastCameraMode == .automatic,
+            guard lastCameraMode != .route,
                   containsActiveGesture(in: mapView) else { return }
             isFollowSuspendedByGesture = true
         }
@@ -342,25 +314,6 @@ struct RouteMapView: UIViewRepresentable {
                 return true
             }
             return view.subviews.contains { containsActiveGesture(in: $0) }
-        }
-
-        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-            guard let annotation = userAnnotation,
-                  let puck = mapView.view(for: annotation) as? UserNavigationPuckView else { return }
-            puck.updateConeRadius(headingConeRadius(in: mapView))
-        }
-
-        private func headingConeRadius(in mapView: MKMapView) -> CGFloat {
-            guard mapView.bounds.width > 1,
-                  !mapView.visibleMapRect.isNull,
-                  !mapView.visibleMapRect.isEmpty else { return 27 }
-            let metersAcross = mapView.visibleMapRect.size.width
-                * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
-            let metersPerScreenPoint = metersAcross / Double(mapView.bounds.width)
-            guard metersPerScreenPoint.isFinite, metersPerScreenPoint > 0 else { return 27 }
-
-            // 光锥代表约 110 米的地面投射距离，随地图缩放换算为屏幕长度。
-            return min(max(CGFloat(110 / metersPerScreenPoint), 16), 72)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -379,24 +332,15 @@ struct RouteMapView: UIViewRepresentable {
                 renderer.lineJoin = .round
                 return renderer
             }
-            if let circle = overlay as? MKCircle {
-                let renderer = MKCircleRenderer(circle: circle)
-                renderer.fillColor = UIColor.systemBlue.withAlphaComponent(0.10)
-                renderer.strokeColor = UIColor.systemBlue.withAlphaComponent(0.45)
-                renderer.lineWidth = 1
-                return renderer
-            }
             return MKOverlayRenderer(overlay: overlay)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if let annotation = annotation as? UserNavigationAnnotation {
-                let identifier = "user-navigation-puck"
-                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? UserNavigationPuckView)
-                    ?? UserNavigationPuckView(annotation: annotation, reuseIdentifier: identifier)
+            if annotation is MKUserLocation {
+                let identifier = "mapkit-user-location"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKUserLocationView)
+                    ?? MKUserLocationView(annotation: annotation, reuseIdentifier: identifier)
                 view.annotation = annotation
-                view.update(headingDegrees: annotation.headingDegrees)
-                view.updateConeRadius(headingConeRadius(in: mapView))
                 return view
             }
 
@@ -468,18 +412,6 @@ private struct MapGuideKey: Equatable {
     }
 }
 
-private struct MapAccuracyKey: Equatable {
-    let latitude: CLLocationDegrees?
-    let longitude: CLLocationDegrees?
-    let radius: Double?
-
-    init(coordinate: CLLocationCoordinate2D?, accuracyMeters: Double?) {
-        latitude = coordinate?.latitude
-        longitude = coordinate?.longitude
-        radius = accuracyMeters.map { min($0, 500).rounded() }
-    }
-}
-
 private final class MatchedRouteAnnotation: NSObject, MKAnnotation {
     dynamic var coordinate: CLLocationCoordinate2D
     var confidence: RouteMatchConfidence?
@@ -490,16 +422,6 @@ private final class MatchedRouteAnnotation: NSObject, MKAnnotation {
         self.coordinate = coordinate
         self.confidence = confidence
         self.isOffRoute = isOffRoute
-    }
-}
-
-private final class UserNavigationAnnotation: NSObject, MKAnnotation {
-    dynamic var coordinate: CLLocationCoordinate2D
-    var headingDegrees: CLLocationDirection?
-
-    init(coordinate: CLLocationCoordinate2D, headingDegrees: CLLocationDirection?) {
-        self.coordinate = coordinate
-        self.headingDegrees = headingDegrees
     }
 }
 
@@ -516,123 +438,5 @@ private final class RouteEndpointAnnotation: NSObject, MKAnnotation {
     init(coordinate: CLLocationCoordinate2D, kind: RouteEndpoint) {
         self.coordinate = coordinate
         self.kind = kind
-    }
-}
-
-/// 参考 Apple 地图的定位 puck：蓝色圆点、白色外环与半透明朝向扇形。
-/// 不替换 annotation 实例，只更新 CALayer 路径，从而避免 heading 更新时闪烁。
-private final class UserNavigationPuckView: MKAnnotationView {
-    private let headingGradient = CAGradientLayer()
-    private let headingConeMask = CAShapeLayer()
-    private let halo = CAShapeLayer()
-    private let whiteRing = CAShapeLayer()
-    private let blueDot = CAShapeLayer()
-    private var currentHeadingDegrees: CLLocationDirection?
-    private var coneRadius: CGFloat = 27
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 164, height: 164)
-        centerOffset = .zero
-        backgroundColor = .clear
-        canShowCallout = false
-        displayPriority = .required
-        isUserInteractionEnabled = false
-        isOpaque = false
-        setupLayers()
-    }
-
-    required init?(coder: NSCoder) { return nil }
-
-    private func setupLayers() {
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-
-        headingGradient.frame = bounds
-        headingGradient.type = .radial
-        headingGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
-        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
-        headingGradient.colors = [
-            UIColor.systemBlue.withAlphaComponent(0.38).cgColor,
-            UIColor.systemBlue.withAlphaComponent(0.24).cgColor,
-            UIColor.systemBlue.withAlphaComponent(0.08).cgColor,
-            UIColor.systemBlue.withAlphaComponent(0).cgColor
-        ]
-        headingGradient.locations = [0, 0.38, 0.76, 1]
-        headingConeMask.frame = headingGradient.bounds
-        headingConeMask.fillColor = UIColor.white.cgColor
-        headingGradient.mask = headingConeMask
-
-        halo.path = UIBezierPath(ovalIn: CGRect(x: center.x - 17, y: center.y - 17, width: 34, height: 34)).cgPath
-        halo.fillColor = UIColor.systemBlue.withAlphaComponent(0.16).cgColor
-
-        whiteRing.path = UIBezierPath(ovalIn: CGRect(x: center.x - 11, y: center.y - 11, width: 22, height: 22)).cgPath
-        whiteRing.fillColor = UIColor.white.cgColor
-        whiteRing.shadowColor = UIColor.black.withAlphaComponent(0.22).cgColor
-        whiteRing.shadowRadius = 2
-        whiteRing.shadowOffset = CGSize(width: 0, height: 1)
-        whiteRing.shadowOpacity = 1
-
-        blueDot.path = UIBezierPath(ovalIn: CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)).cgPath
-        blueDot.fillColor = UIColor.systemBlue.cgColor
-        blueDot.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
-        blueDot.lineWidth = 1.2
-
-        layer.addSublayer(headingGradient)
-        layer.addSublayer(halo)
-        layer.addSublayer(whiteRing)
-        layer.addSublayer(blueDot)
-    }
-
-    func update(headingDegrees: CLLocationDirection?) {
-        currentHeadingDegrees = headingDegrees
-        redrawCone(animated: true)
-    }
-
-    func updateConeRadius(_ radius: CGFloat) {
-        let clampedRadius = min(max(radius, 16), 72)
-        guard abs(clampedRadius - coneRadius) >= 0.5 else { return }
-        coneRadius = clampedRadius
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
-        CATransaction.commit()
-        redrawCone(animated: false)
-    }
-
-    private func redrawCone(animated: Bool) {
-        guard let headingDegrees = currentHeadingDegrees else {
-            headingConeMask.removeAllAnimations()
-            headingConeMask.path = nil
-            return
-        }
-
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let radians = CGFloat((headingDegrees - 90) * .pi / 180)
-        let spread: CGFloat = .pi / 10
-        let path = UIBezierPath()
-        path.move(to: center)
-        path.addArc(withCenter: center,
-                    radius: coneRadius,
-                    startAngle: radians - spread,
-                    endAngle: radians + spread,
-                    clockwise: true)
-        path.close()
-
-        if animated {
-            let animation = CABasicAnimation(keyPath: "path")
-            animation.fromValue = (headingConeMask.presentation() as? CAShapeLayer)?.path ?? headingConeMask.path
-            animation.toValue = path.cgPath
-            animation.duration = 0.12
-            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            headingConeMask.add(animation, forKey: "headingPath")
-        } else {
-            headingConeMask.removeAnimation(forKey: "headingPath")
-        }
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        headingConeMask.path = path.cgPath
-        CATransaction.commit()
     }
 }

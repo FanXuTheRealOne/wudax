@@ -14,6 +14,7 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     @Published private(set) var authorizationState: AuthorizationState = .notDetermined
     @Published private(set) var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy
+    @Published private(set) var latestRawLocation: CLLocation?
     @Published private(set) var latestLocation: CLLocation?
     private(set) var latestHeading: CLHeading?
     @Published private(set) var headingDegrees: CLLocationDirection?
@@ -22,6 +23,7 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     private let manager = CLLocationManager()
     private var monitoringMode: MonitoringMode = .browsing
+    private let maximumReliableHorizontalAccuracy: CLLocationAccuracy = 100
 
     override init() {
         super.init()
@@ -45,7 +47,12 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
     }
 
     func startMonitoring(mode: MonitoringMode = .browsing) {
+        let startsNewSession = !isMonitoring || monitoringMode != mode
         monitoringMode = mode
+        if startsNewSession {
+            latestRawLocation = nil
+            latestLocation = nil
+        }
         requestPermission()
         guard manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways else { return }
         configureLocationUpdates(for: mode)
@@ -107,6 +114,8 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
             now.timeIntervalSince($0.timestamp) <= 15 &&
             CLLocationCoordinate2DIsValid($0.coordinate)
         }) else { return }
+        latestRawLocation = location
+        guard location.horizontalAccuracy <= maximumReliableHorizontalAccuracy else { return }
         latestLocation = location
         onLocationUpdate?(location)
     }

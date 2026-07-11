@@ -30,7 +30,7 @@ struct MapTabView: View {
                 RouteMapView(
                     points: record.document.points,
                     currentCoordinate: session.location.latestLocation?.coordinate,
-                    userHeadingDegrees: session.location.headingDegrees,
+                    tracksUserLocation: true,
                     cameraMode: cameraMode,
                     cameraRequestID: cameraRequestID,
                     mapLayer: mapLayer

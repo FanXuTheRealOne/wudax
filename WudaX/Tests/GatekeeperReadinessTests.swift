@@ -55,3 +55,29 @@ final class GatekeeperReadinessTests: XCTestCase {
         )
     }
 }
+
+final class TripStartGateTests: XCTestCase {
+    func testRequiresTwoReliableFixesAtRouteStart() {
+        var gate = TripStartGate()
+
+        XCTAssertFalse(gate.register(distanceMeters: 20, horizontalAccuracyMeters: 12))
+        XCTAssertTrue(gate.register(distanceMeters: 18, horizontalAccuracyMeters: 10))
+    }
+
+    func testPoorAccuracyCannotStartTrip() {
+        var gate = TripStartGate()
+
+        XCTAssertFalse(gate.register(distanceMeters: 10, horizontalAccuracyMeters: 80))
+        XCTAssertFalse(gate.register(distanceMeters: 10, horizontalAccuracyMeters: 80))
+        XCTAssertEqual(gate.consecutiveFixes, 0)
+    }
+
+    func testLeavingStartAreaResetsConsecutiveFixes() {
+        var gate = TripStartGate()
+
+        XCTAssertFalse(gate.register(distanceMeters: 25, horizontalAccuracyMeters: 15))
+        XCTAssertFalse(gate.register(distanceMeters: 90, horizontalAccuracyMeters: 15))
+        XCTAssertFalse(gate.register(distanceMeters: 25, horizontalAccuracyMeters: 15))
+        XCTAssertTrue(gate.register(distanceMeters: 24, horizontalAccuracyMeters: 15))
+    }
+}
