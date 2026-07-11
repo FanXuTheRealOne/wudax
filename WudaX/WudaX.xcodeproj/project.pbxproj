@@ -32,7 +32,6 @@
 		49F640D85E3FC4B1D81040D0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF0ABE29A7F4B7820972AC3 /* LocationService.swift */; };
 		4E8B7F41B65D85ABFB0F3B6C /* RouteRecordCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345758D013D4FB5A9A2E9532 /* RouteRecordCard.swift */; };
 		4F9A39EED4900D9B70F21894 /* exo_thumb.png in Resources */ = {isa = PBXBuildFile; fileRef = 80ABC1BE1CEE90A1B1231A12 /* exo_thumb.png */; };
-		5EA7FE66E39FCE548F1D9E22 /* GatekeeperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C147153596622A27B0AFEC /* GatekeeperView.swift */; };
 		5F155B7493801EE1F14F596B /* RouteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02A2257139E72959A21BE651 /* RouteDetailView.swift */; };
 		614124377ED12C8B4CE3DCAF /* TripStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233F5E5144C5AF23A89B38FB /* TripStore.swift */; };
 		6351BADA355F23FEB572EF87 /* HikingRuleTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608BDE009B5AB47516158723 /* HikingRuleTools.swift */; };
@@ -110,7 +109,6 @@
 		615FD2E85E5AC473B0DDA23F /* PlanningCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningCoordinatorTests.swift; sourceTree = "<group>"; };
 		65576A53A4EB3E4062908411 /* BudgetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetCardView.swift; sourceTree = "<group>"; };
 		656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningChatView.swift; sourceTree = "<group>"; };
-		65C147153596622A27B0AFEC /* GatekeeperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatekeeperView.swift; sourceTree = "<group>"; };
 		765D642CF7D61EFB09E2A38D /* TripTrackRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackRecorderTests.swift; sourceTree = "<group>"; };
 		77841FBD00C8403C9AE8D748 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7EF8007B88320F8B16591338 /* WudaXTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WudaXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -282,7 +280,6 @@
 				827403BEC8A5090E492B39E7 /* ChatView.swift */,
 				EAC0C2F521D68EE3EBB95E1F /* DataTabView.swift */,
 				02B25E221098169C67365353 /* ExoShowcaseView.swift */,
-				65C147153596622A27B0AFEC /* GatekeeperView.swift */,
 				F7F4F868B3B84F458B6025F8 /* HomeView.swift */,
 				313E3B037B3A601F25CDAAD4 /* MapTabView.swift */,
 				656A7EF4560CC2F4DF6E707E /* PlanningChatView.swift */,
@@ -519,7 +516,6 @@
 				9632B87E74643C815C26E927 /* GPXParser.swift in Sources */,
 				401F8AEEF9C3C27A9A6D6951 /* GPXRouteMatcher.swift in Sources */,
 				20A9004311FC7FA863A0D228 /* GPXRoutePreprocessor.swift in Sources */,
-				5EA7FE66E39FCE548F1D9E22 /* GatekeeperView.swift in Sources */,
 				7165DC8C516768855E07E3EF /* HealthKitService.swift in Sources */,
 				75E27014A2A1389F7C278965 /* HikingModels.swift in Sources */,
 				6351BADA355F23FEB572EF87 /* HikingRuleTools.swift in Sources */,

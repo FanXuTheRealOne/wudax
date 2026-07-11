@@ -3,17 +3,17 @@ import Combine
 @testable import WudaX
 
 final class PlanningCoordinatorTests: XCTestCase {
+    private let completeExperience = HikerExperience(hardestDistanceKm: 20,
+                                                     hardestAscentM: 1200,
+                                                     highestAltitudeM: 3000,
+                                                     longestDurationH: 8)
+
     @MainActor
     func testStartPlanningFlowImportsGPXBeforeBuildingReport() throws {
         let coordinator = PlanningCoordinator()
+        coordinator.experience = completeExperience
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
         coordinator.importGPX(from: url)
-        coordinator.answerInjury(.none)
-        coordinator.answerSurgery(.none)
-        coordinator.answerMedicalConsideration(.none)
-        coordinator.answerSleep(7)
-        coordinator.answerFatigue(2)
-        coordinator.answerPain(0)
 
         XCTAssertNotNil(coordinator.analyzedGPX)
         let result = try XCTUnwrap(coordinator.buildPlan(profile: FatigueProfile()))
@@ -39,36 +39,30 @@ final class PlanningCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testRouteImportRemainsAvailableBeforePersonalHealthHistoryIsComplete() throws {
+    func testRouteImportRemainsAvailableBeforeExperienceIsComplete() throws {
         let coordinator = PlanningCoordinator()
+        coordinator.experience = HikerExperience()
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
 
         coordinator.importGPX(from: url)
 
-        XCTAssertFalse(coordinator.personalHealth.isComplete)
+        XCTAssertFalse(coordinator.experienceComplete)
         XCTAssertTrue(coordinator.canImportGPX)
     }
 
     @MainActor
-    func testPersonalHealthHistoryIsRequiredBeforeBuildingReport() throws {
+    func testExperienceIsRequiredBeforeBuildingReport() throws {
         let coordinator = PlanningCoordinator()
+        coordinator.experience = HikerExperience()
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
         coordinator.importGPX(from: url)
-        coordinator.answerSleep(7)
-        coordinator.answerFatigue(2)
-        coordinator.answerPain(0)
 
-        XCTAssertFalse(coordinator.personalHealth.isComplete)
         XCTAssertNil(coordinator.buildPlan(profile: FatigueProfile()))
 
-        coordinator.answerInjury(.knee)
-        coordinator.answerSurgery(.recovering)
-        coordinator.answerSurgeryLocation(.knee)
-        coordinator.answerMedicalConsideration(.medication)
-
-        XCTAssertTrue(coordinator.personalHealth.isComplete)
+        coordinator.experience = completeExperience
         let result = try XCTUnwrap(coordinator.buildPlan(profile: FatigueProfile()))
-        XCTAssertTrue(result.readiness.reasons.contains { $0.contains("膝") || $0.contains("手术") })
+        XCTAssertFalse(result.comparison.difficultyLabel.isEmpty)
+        XCTAssertFalse(result.equipment.isEmpty)
     }
 
     @MainActor
@@ -82,10 +76,10 @@ final class PlanningCoordinatorTests: XCTestCase {
             expectation.fulfill()
         }
 
-        session.planning.answerInjury(.knee)
+        session.planning.answerHardestDistance(18)
 
         wait(for: [expectation], timeout: 1)
-        XCTAssertEqual(session.planning.personalHealth.injury, .knee)
+        XCTAssertEqual(session.planning.experience.hardestDistanceKm, 18)
         _ = cancellable
     }
 }

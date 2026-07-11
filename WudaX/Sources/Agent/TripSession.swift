@@ -11,10 +11,16 @@ final class TripSession: ObservableObject {
     enum Phase {
         case home
         case planningChat      // 阶段一：行前追问
-        case budgetCard        // 阶段一：预算卡
-        case gate              // 阶段二：出发守门
+        case budgetCard        // 阶段一：行前报告(match report + 装备确认合并页)
         case inTrip            // 阶段三：行中
         case review            // 阶段五：行后复盘
+    }
+
+    /// 行中跟踪状态:出发后先等待定位/前往起点,到达起点才自动开始计时与记录。
+    enum LiveTrackingState: Equatable {
+        case waitingGPS
+        case toStart(distanceMeters: Double)
+        case recording
     }
 
     @Published var phase: Phase = .home
@@ -40,6 +46,9 @@ final class TripSession: ObservableObject {
     @Published var lastDecision: AgentDecision?
     @Published var showRetreatSheet = false
     @Published var tripEndedByRetreat = false
+    @Published private(set) var trackingState: LiveTrackingState = .waitingGPS
+    /// 真正开始记录(到达起点)的时刻;计时与计划偏差以此为基准。
+    @Published private(set) var hikeStartDate: Date?
 
     // 复盘
     @Published var reviewEntries = SampleData.reviewQuestions
@@ -52,8 +61,33 @@ final class TripSession: ObservableObject {
     private var lastOffRouteEventAt: Date?
     private var routeMatcher: GPXRouteMatcher?
     private var lastRouteLocationAt: Date?
-    /// 当前规划来源于哪条已存记录(为空表示是新导入,完成后入库)。
-    private var planningSourceRecordID: UUID?
+    /// 本次规划/行程对应路线库中的记录:入口 1 为所选历史记录,入口 2 为新入库记录。
+    /// 行程结束时写进 StoredTrip.routeRecordID,作为该路线的行走 log。
+    private var activeRouteRecordID: UUID?
+    /// 距路线起点多近视为「到达起点」,自动开始记录。
+    static let startProximityMeters: Double = 60
+
+    var routeStartCoordinate: RouteCoordinate? { preparedRoute?.vertices.first?.coordinate }
+    var routeEndCoordinate: RouteCoordinate? { preparedRoute?.vertices.last?.coordinate }
+
+    /// 剩余距离(km):优先用路线匹配结果,退化为 总长 − 已行进。
+    var remainingDistanceKm: Double? {
+        if let match = routeMatch { return match.remainingDistanceMeters / 1_000 }
+        guard let total = preparedRoute?.totalDistanceMeters else { return nil }
+        return max(total / 1_000 - status.elapsedKm, 0)
+    }
+
+    /// 预计到达:已有可信均速时按均速,否则按计划配速。
+    var estimatedFinishDate: Date? {
+        guard trackingState == .recording, let remaining = remainingDistanceKm else { return nil }
+        let measuredSpeed = status.elapsedHours > 0.2 && status.elapsedKm > 0.2
+            ? status.elapsedKm / status.elapsedHours : 0
+        let plannedSpeed = plan.route.estimatedHours > 0
+            ? plan.route.distanceKm / plan.route.estimatedHours : 0
+        let speed = measuredSpeed > 0.3 ? measuredSpeed : plannedSpeed
+        guard speed > 0.1 else { return nil }
+        return Date().addingTimeInterval(remaining / speed * 3600)
+    }
 
     init() {
         location.onLocationUpdate = { [weak self] location in
@@ -80,22 +114,22 @@ final class TripSession: ObservableObject {
         plan.waterL = 2.5
         plan.foodKcal = 1200
         switch target {
-        case "budget": phase = .budgetCard
-        case "gate": phase = .gate
+        case "budget", "gate": phase = .budgetCard
         case "trip":
-            status.elapsedKm = 11.2
-            status.elapsedHours = 4.5
-            status.planDeltaMin = -18
-            status.remainingWaterL = 1.2
-            status.profileIndex = 18
-            phase = .inTrip
+            // 走真实出发流程:等待定位 → 虚线引导至起点 → 自动开始记录。
+            loadDebugRoute()
+            depart()
         case "checkin":
+            loadDebugRoute()
             status.elapsedKm = 14.8
             status.profileIndex = 23
             status.upcomingLongDescent = true
+            hikeStartDate = Date().addingTimeInterval(-5 * 3600)
+            trackingState = .recording
             phase = .inTrip
             activeCheckin = .beforeDescent
         case "retreat":
+            loadDebugRoute()
             status.elapsedKm = 16.5
             status.elapsedHours = 6.8
             status.remainingWaterL = 0.5
@@ -105,11 +139,25 @@ final class TripSession: ObservableObject {
             status.profileIndex = 24
             status.upcomingLongDescent = true
             status.planDeltaMin = -42
+            hikeStartDate = Date().addingTimeInterval(-6.8 * 3600)
+            trackingState = .recording
             phase = .inTrip
             lastDecision = AgentEngine.evaluate(status: status, plan: plan)
             showRetreatSheet = true
         case "review": phase = .review
         default: break
+        }
+    }
+
+    /// 调试跳转时从种子库载入一条真实几何的路线,让行中地图/匹配可用。
+    private func loadDebugRoute() {
+        guard let record = RouteLibrarySeed.records.first else { return }
+        let analyzed = record.analyzed()
+        planning.loadForPlanning(record)
+        plan.route = Route(analyzedGPX: analyzed)
+        if let prepared = try? GPXRoutePreprocessor().prepare(analyzed.document.copyForPlanning()) {
+            preparedRoute = prepared
+            routeMatcher = GPXRouteMatcher(route: prepared)
         }
     }
 
@@ -123,7 +171,7 @@ final class TripSession: ObservableObject {
         routeMatcher = nil
         routeMatch = nil
         lastRouteLocationAt = nil
-        planningSourceRecordID = nil
+        activeRouteRecordID = nil
         phase = .planningChat
     }
 
@@ -136,7 +184,7 @@ final class TripSession: ObservableObject {
         routeMatcher = nil
         routeMatch = nil
         lastRouteLocationAt = nil
-        planningSourceRecordID = record.id
+        activeRouteRecordID = record.id
         planning.loadForPlanning(record)
         phase = .planningChat
     }
@@ -161,9 +209,12 @@ final class TripSession: ObservableObject {
             offlineResources.prepare(analyzedGPX: analyzed, preparedRoute: prepared,
                                      originalGPXData: planning.importedGPXData)
         }
-        // 新导入的路线完成规划后写入本地库(从已存记录进入的不重复入库)。
-        if planningSourceRecordID == nil, let analyzed = planning.analyzedGPX {
-            library?.upsert(RouteRecord(analyzedGPX: analyzed, createdAt: Date()))
+        // 新导入的路线完成规划后写入本地库并置顶(从已存记录进入的不重复入库);
+        // 记住记录 id,行程结束后把本次行走 log 挂到这条路线之下。
+        if activeRouteRecordID == nil, let analyzed = planning.analyzedGPX {
+            let record = RouteRecord(analyzedGPX: analyzed, createdAt: Date())
+            library?.upsert(record)
+            activeRouteRecordID = record.id
         }
         phase = .budgetCard
     }
@@ -185,8 +236,6 @@ final class TripSession: ObservableObject {
         // 由聊天流中的“生成行前报告”显式进入预算卡。
     }
 
-    func confirmBudget() { withAnimation { phase = .gate } }
-
     func depart() {
         status = TripStatus()
         status.remainingWaterL = plan.waterL ?? plan.suggestedWaterL
@@ -198,6 +247,8 @@ final class TripSession: ObservableObject {
         lastOffRouteEventAt = nil
         routeMatch = nil
         lastRouteLocationAt = nil
+        hikeStartDate = nil
+        trackingState = .waitingGPS
         if let preparedRoute {
             routeMatcher = GPXRouteMatcher(route: preparedRoute)
         } else if let analyzed = planning.analyzedGPX,
@@ -205,7 +256,8 @@ final class TripSession: ObservableObject {
             preparedRoute = prepared
             routeMatcher = GPXRouteMatcher(route: prepared)
         }
-        recorder.start()
+        // 没有可用路线(调试直跳等)时无起点可等,立即开始记录。
+        if preparedRoute == nil { beginRecording() }
         withAnimation { phase = .inTrip }
         location.startMonitoring()
         Task {
@@ -221,8 +273,8 @@ final class TripSession: ObservableObject {
         stopMonitoring()
         location.stopMonitoring()
         recorder.stop()
-        persistTrip()
         tripEndedByRetreat = retreated
+        persistTrip()
         activeCheckin = nil
         showRetreatSheet = false
         withAnimation { phase = .review }
@@ -249,9 +301,10 @@ final class TripSession: ObservableObject {
     private func stopMonitoring() { riskTimer?.cancel(); riskTimer = nil }
 
     private func evaluateActiveStatus() {
-        guard phase == .inTrip, activeCheckin == nil, !showRetreatSheet else { return }
+        guard phase == .inTrip, trackingState == .recording,
+              activeCheckin == nil, !showRetreatSheet else { return }
         let now = Date()
-        if let tripStartDate { status.elapsedHours = now.timeIntervalSince(tripStartDate) / 3600 }
+        if let hikeStartDate { status.elapsedHours = now.timeIntervalSince(hikeStartDate) / 3600 }
         if let routeMatcher,
            lastRouteLocationAt.map({ now.timeIntervalSince($0) >= 15 }) ?? false {
             applyRouteMatch(routeMatcher.locationUnavailable(at: now,
@@ -292,7 +345,9 @@ final class TripSession: ObservableObject {
 
     private func handleLocation(_ location: CLLocation) {
         recorder.append(location)
-        guard phase == .inTrip, let routeMatcher else { return }
+        guard phase == .inTrip else { return }
+        if trackingState != .recording { updateApproach(with: location) }
+        guard let routeMatcher else { return }
         let input = RouteLocationInput(
             coordinate: RouteCoordinate(latitude: location.coordinate.latitude,
                                         longitude: location.coordinate.longitude),
@@ -304,12 +359,45 @@ final class TripSession: ObservableObject {
             cadenceStepsPerMinute: nil
         )
         lastRouteLocationAt = location.timestamp
-        applyRouteMatch(routeMatcher.match(input), allowOffRouteAlert: true)
+        applyRouteMatch(routeMatcher.match(input), allowOffRouteAlert: trackingState == .recording)
         evaluateActiveStatus()
+    }
+
+    /// 尚未开始记录:引导用户前往路线起点,足够近时自动开始。
+    private func updateApproach(with location: CLLocation) {
+        guard let start = routeStartCoordinate else {
+            beginRecording(at: location.timestamp)
+            return
+        }
+        let distance = CLLocation(latitude: start.latitude, longitude: start.longitude)
+            .distance(from: location)
+        if distance <= Self.startProximityMeters {
+            beginRecording(at: location.timestamp)
+        } else {
+            trackingState = .toStart(distanceMeters: distance)
+        }
+    }
+
+    /// 到达起点(或确认已在路线上)后才真正开始:计时、轨迹记录、剩余距离都以此为起点。
+    private func beginRecording(at date: Date = Date()) {
+        guard trackingState != .recording else { return }
+        trackingState = .recording
+        hikeStartDate = date
+        recorder.start()
+        events.append(.init(date: date, title: "开始记录",
+                            detail: "已到达路线起点,自动开始计时与剩余距离统计", risk: .low))
+        Haptics.notify()
     }
 
     private func applyRouteMatch(_ match: RouteMatchResult, allowOffRouteAlert: Bool) {
         routeMatch = match
+        // 中途汇入路线(如从半程加入)也视为开始:匹配高置信且贴线。
+        if trackingState != .recording,
+           match.confidence == .high,
+           match.distanceToRouteMeters <= Self.startProximityMeters {
+            beginRecording()
+        }
+        guard trackingState == .recording else { return }
         let statusProgressMeters: Double = switch match.confidence {
         case .high, .medium: match.routeProgressMeters
         case .low, .none: match.lastReliableProgressMeters
@@ -388,7 +476,10 @@ final class TripSession: ObservableObject {
                                 summary: HikingRuleTools.summarizeTrip(plan: plan, status: status, peakRisk: peak,
                                                                         keyEvents: events.map(\.title)),
                                 events: events, reviewAnswers: answers, trainingAdvice: advice,
-                                recordedTrack: recorder.points)
+                                recordedTrack: recorder.points,
+                                routeRecordID: activeRouteRecordID,
+                                startedAt: hikeStartDate ?? tripStartDate,
+                                endedByRetreat: tripEndedByRetreat)
         tripStore.save(stored)
     }
 }

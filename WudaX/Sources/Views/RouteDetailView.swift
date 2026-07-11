@@ -1,13 +1,16 @@
 import SwiftUI
 
 /// 历史记录点开后的路线详情/预览(对应参考图 1、2 的功能):
-/// 地图上画出路线 + 原作者信息(明确区别于本 App 用户)+ 关键数据 + 开始规划。
+/// 地图上画出路线 + 原作者信息(明确区别于本 App 用户)+ 关键数据 + 行走记录 log + 开始规划。
 struct RouteDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var session: TripSession
     let record: RouteRecord
     let onStartPlanning: () -> Void
 
     private var prov: RouteProvenance { record.provenance }
+    /// 这条路线的每一次行走记录(真实持久化数据,最近一次在前)。
+    private var walkLogs: [StoredTrip] { session.tripStore.trips(forRoute: record.id) }
 
     var body: some View {
         ZStack {
@@ -28,6 +31,7 @@ struct RouteDetailView: View {
 
                         statsGrid
                         provenanceCard
+                        walkLogCard
 
                         PillButton(title: "用这条路线开始规划") { onStartPlanning() }
                         Text("原作者数据仅供参考;开始规划后会结合你自己的身体状况重新评估。")
@@ -117,6 +121,74 @@ struct RouteDetailView: View {
 
     private var provDivider: some View {
         Rectangle().fill(WDColor.mist.opacity(0.15)).frame(width: 1, height: 30).padding(.horizontal, 6)
+    }
+
+    // MARK: 行走记录 log —— 每次走这条路线都会在此留一条
+
+    private var walkLogCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("行走记录", systemImage: "figure.hiking")
+                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                    Spacer()
+                    if !walkLogs.isEmpty {
+                        Text("\(walkLogs.count) 次").font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                    }
+                }
+                if walkLogs.isEmpty {
+                    Text("还没有走过这条路线。开始规划并出发后,每一次行程都会记录在这里。")
+                        .font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                } else {
+                    ForEach(Array(walkLogs.enumerated()), id: \.element.id) { index, trip in
+                        walkLogRow(trip)
+                        if index != walkLogs.count - 1 {
+                            Divider().overlay(WDColor.line)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func walkLogRow(_ trip: StoredTrip) -> some View {
+        HStack(spacing: 12) {
+            Circle().fill(trip.summary.peakRisk.color).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(logDateText(trip))
+                        .font(WDFont.body(14).weight(.medium)).foregroundStyle(WDColor.ricePaper)
+                    if trip.endedByRetreat == true {
+                        Text("中途撤退").font(WDFont.caption(10).weight(.semibold))
+                            .foregroundStyle(WDColor.cinnabar)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(WDColor.cinnabar.opacity(0.12)))
+                    } else {
+                        Text("完成").font(WDFont.caption(10).weight(.semibold))
+                            .foregroundStyle(WDColor.bamboo)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(WDColor.bamboo.opacity(0.12)))
+                    }
+                }
+                Text("\(logDurationText(trip)) · \(String(format: "%.1f km", trip.summary.actualDistanceKm)) · 峰值风险 \(trip.summary.peakRisk.rawValue)")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func logDateText(_ trip: StoredTrip) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy/MM/dd HH:mm"
+        return f.string(from: trip.startedAt ?? trip.completedAt)
+    }
+
+    private func logDurationText(_ trip: StoredTrip) -> String {
+        let hours = trip.summary.actualHours
+        let h = Int(hours)
+        let m = Int((hours - Double(h)) * 60)
+        return "用时 \(h)h\(String(format: "%02d", m))m"
     }
 
     private var recordedDateText: String {

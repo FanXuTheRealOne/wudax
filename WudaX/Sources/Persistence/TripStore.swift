@@ -10,6 +10,10 @@ struct StoredTrip: Identifiable, Codable, Equatable, Sendable {
     var reviewAnswers: [String: String]
     var trainingAdvice: TrainingAdvice
     var recordedTrack: [RecordedTrackPoint] = []
+    /// 本次行程走的是路线库里哪条记录(路线详情页按此聚合行走 log);旧数据为 nil。
+    var routeRecordID: UUID?
+    var startedAt: Date?
+    var endedByRetreat: Bool?
 }
 
 @MainActor
@@ -34,6 +38,12 @@ final class TripStore: ObservableObject {
     func delete(_ trip: StoredTrip) {
         trips.removeAll { $0.id == trip.id }
         persist()
+    }
+
+    /// 某条库内路线的全部行走记录,最近一次在前。
+    func trips(forRoute id: UUID) -> [StoredTrip] {
+        trips.filter { $0.routeRecordID == id }
+            .sorted { $0.completedAt > $1.completedAt }
     }
 
     private func load() {

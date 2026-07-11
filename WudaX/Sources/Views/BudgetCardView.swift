@@ -1,15 +1,33 @@
 import SwiftUI
 
-// MARK: - 阶段一产出：行程预算卡（本次路线 × 过往经历 交叉比对）
+// MARK: - 阶段一产出:行前报告(match report + 装备确认合并页)
+// 看完「本次路线 × 过往经历」的比对报告,在同一页勾完装备与权限,直接出发。
 
 struct BudgetCardView: View {
     @EnvironmentObject var session: TripSession
     @State private var appeared = false
+    @State private var checks: [GateItem] = []
+
+    struct GateItem: Identifiable {
+        let id = UUID()
+        var title: String
+        var reason: String
+        var required: Bool
+        var done = false
+    }
 
     private var comparison: RouteComparison? { session.planningResult?.comparison }
     private var supply: SupplyBudgetResult? { session.planningResult?.supply }
     private var exp: HikerExperience { session.planning.experience }
     private var route: Route { session.plan.route }
+
+    private var allRequiredDone: Bool { checks.filter(\.required).allSatisfy(\.done) }
+    private var locationReady: Bool {
+        session.location.authorizationState == .whenInUse || session.location.authorizationState == .always
+    }
+    private var gateReady: Bool {
+        allRequiredDone && locationReady && session.notifications.authorizationGranted && session.offlineResources.status.isReady
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,15 +39,38 @@ struct BudgetCardView: View {
                     profileCard
                     analysisCard
                     suppliesCard
-                    equipmentCard
+                    equipmentChecklist
                     checkpointsCard
+                    permissionCard
                     Spacer(minLength: 8)
-                    PillButton(title: "确认并开始准备") { session.confirmBudget() }
+                    PillButton(
+                        title: gateReady ? "接受风险并出发" : "先完成装备与权限确认",
+                        color: gateReady ? WDColor.ink : WDColor.mossSurface,
+                        textColor: gateReady ? WDColor.onDark : WDColor.mist
+                    ) {
+                        if gateReady { session.depart() }
+                    }
+                    Text("Agent 将在行程中结合手表数据与你的确认，主动判断状态。")
+                        .font(WDFont.caption()).foregroundStyle(WDColor.mist.opacity(0.8))
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .padding(22)
             }
         }
-        .onAppear { withAnimation(.spring(duration: 0.8).delay(0.1)) { appeared = true } }
+        .task {
+            session.location.requestPermission()
+            _ = await session.notifications.requestAuthorization()
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.8).delay(0.1)) { appeared = true }
+            if checks.isEmpty { rebuildChecks() }
+        }
+    }
+
+    private func rebuildChecks() {
+        checks = session.plan.equipment.map {
+            GateItem(title: $0.title, reason: $0.reason, required: $0.required)
+        }
     }
 
     private var topBar: some View {
@@ -39,7 +80,7 @@ struct BudgetCardView: View {
                     .font(.system(size: 17, weight: .medium)).foregroundStyle(WDColor.ricePaper)
             }
             Spacer()
-            Text("行程预算卡").font(WDFont.heading(18)).foregroundStyle(WDColor.ricePaper)
+            Text("行前报告").font(WDFont.heading(18)).foregroundStyle(WDColor.ricePaper)
             Spacer()
             Color.clear.frame(width: 17, height: 17)
         }
@@ -176,23 +217,63 @@ struct BudgetCardView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
     }
 
-    private var equipmentCard: some View {
+    // 装备清单:直接在报告页逐项勾选确认,不再单独一页。
+    private var equipmentChecklist: some View {
         InkCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("装备清单", systemImage: "backpack")
-                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                ForEach(session.plan.equipment) { item in
-                    HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: item.required ? "checkmark.circle" : "circle")
-                            .font(.system(size: 14)).foregroundStyle(item.required ? WDColor.bamboo : WDColor.mist)
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("补给与装备清单", systemImage: "backpack")
+                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                    Text("出发之前，逐项确认背包里真实带了这些。")
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 8)
+                ForEach($checks) { $item in
+                    Toggle(isOn: $item.done.animation(.spring(duration: 0.3))) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title).font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
+                            HStack(spacing: 6) {
+                                Text(item.title).font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                                if !item.required {
+                                    Text("可选").font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
+                                }
+                            }
                             Text(item.reason).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
                         }
-                        Spacer()
+                    }
+                    .toggleStyle(CheckToggleStyle())
+                    .padding(.vertical, 9)
+                    if item.id != checks.last?.id {
+                        Divider().overlay(WDColor.line)
                     }
                 }
             }
+        }
+    }
+
+    private var permissionCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("离线与权限", systemImage: "checklist")
+                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                auditRow(title: "GPX / 路线资源", value: session.offlineResources.status.isReady ? "已就绪" : "未准备",
+                         ok: session.offlineResources.status.isReady)
+                auditRow(title: "定位", value: locationReady ? "已授权" : "等待授权", ok: locationReady)
+                auditRow(title: "通知", value: session.notifications.authorizationGranted ? "已授权" : "等待授权",
+                         ok: session.notifications.authorizationGranted)
+                Text(session.offlineResources.status.integrityMessage)
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+        }
+    }
+
+    private func auditRow(title: String, value: String, ok: Bool) -> some View {
+        HStack {
+            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
+                .foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
+            Text(title).font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
+            Spacer()
+            Text(value).font(WDFont.caption()).foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
         }
     }
 

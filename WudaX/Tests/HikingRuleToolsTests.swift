@@ -3,13 +3,13 @@ import XCTest
 
 final class HikingRuleToolsTests: XCTestCase {
     func testRouteLoadAndSupplyBudgetAreDeterministic() {
-        let route = SampleData.wugongshan
+        let route = SampleData.niyuhe
         let load = HikingRuleTools.calculateRouteLoad(route: route)
         let supply = HikingRuleTools.calculateSupplyBudget(route: route, profile: FatigueProfile())
 
         XCTAssertEqual(load.label, "高负荷")
         XCTAssertGreaterThan(load.score, 5)
-        XCTAssertEqual(supply.waterLiters, 3.8, accuracy: 0.01)
+        XCTAssertEqual(supply.waterLiters, 4.3, accuracy: 0.01)
         XCTAssertGreaterThan(supply.foodKilocalories, 2_000)
     }
 

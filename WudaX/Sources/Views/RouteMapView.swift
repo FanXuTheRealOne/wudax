@@ -19,6 +19,10 @@ struct RouteMapView: UIViewRepresentable {
     var isOffRoute = false
     var cameraMode: RouteMapCameraMode = .automatic
     var cameraRequestID = 0
+    /// 在路线起终点画旗标(行中大地图用)。
+    var showsEndpointFlags = false
+    /// 尚未到达起点:从当前位置到路线起点画虚线引导。
+    var guideLineToStart = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -49,12 +53,28 @@ struct RouteMapView: UIViewRepresentable {
 
         let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
         map.addOverlay(polyline)
+        var guidePolyline: GuidePolyline?
+        if guideLineToStart, let currentCoordinate, let start = coordinates.first {
+            var guide = [currentCoordinate, start]
+            let overlay = GuidePolyline(coordinates: &guide, count: 2)
+            guidePolyline = overlay
+            map.addOverlay(overlay)
+        }
         if let currentCoordinate,
            let horizontalAccuracyMeters,
            horizontalAccuracyMeters.isFinite,
            horizontalAccuracyMeters > 0 {
             map.addOverlay(MKCircle(center: currentCoordinate,
                                     radius: min(horizontalAccuracyMeters, 500)))
+        }
+        if showsEndpointFlags, let start = coordinates.first, let end = coordinates.last {
+            map.addAnnotation(EndpointAnnotation(coordinate: start, isStart: true))
+            let separation = CLLocation(latitude: start.latitude, longitude: start.longitude)
+                .distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
+            // 环线起终点重合时只画起点旗。
+            if separation > 30 {
+                map.addAnnotation(EndpointAnnotation(coordinate: end, isStart: false))
+            }
         }
         if let matchedCoordinate {
             map.addAnnotation(MatchedRouteAnnotation(
@@ -71,26 +91,46 @@ struct RouteMapView: UIViewRepresentable {
             ))
         }
 
-        updateCamera(map, polyline: polyline, coordinator: context.coordinator, fitRoute: fitRoute)
+        updateCamera(map, polyline: polyline, guidePolyline: guidePolyline,
+                     coordinator: context.coordinator, fitRoute: fitRoute)
     }
 
     private func updateCamera(_ map: MKMapView,
                               polyline: MKPolyline,
+                              guidePolyline: GuidePolyline?,
                               coordinator: Coordinator,
                               fitRoute: Bool) {
         switch cameraMode {
         case .automatic:
             if let currentCoordinate {
-                map.setCenter(currentCoordinate, animated: true)
-            } else if fitRoute {
-                fit(polyline, on: map, animated: false)
+                if let guidePolyline {
+                    // 前往起点阶段:始终保持自己与起点旗标(虚线两端)同屏。
+                    map.setRegion(paddedRegion(for: guidePolyline.boundingMapRect, scale: 1.8,
+                                               minDelta: 0.008),
+                                  animated: coordinator.hasSetUserRegion)
+                    coordinator.hasSetUserRegion = true
+                } else if coordinator.hasSetUserRegion {
+                    map.setCenter(currentCoordinate, animated: true)
+                } else {
+                    map.setRegion(MKCoordinateRegion(center: currentCoordinate,
+                                                     latitudinalMeters: 1_500,
+                                                     longitudinalMeters: 1_500),
+                                  animated: false)
+                    coordinator.hasSetUserRegion = true
+                }
+            } else if !coordinator.hasSetInitialRegion {
+                // 尚无定位:先展示整条路线。setRegion 在布局完成前调用也能正确生效,
+                // 带 edgePadding 的 setVisibleMapRect 在零尺寸地图上会退化成全球视野。
+                map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: false)
             }
+            coordinator.hasSetInitialRegion = true
 
         case .route:
             let needsFocus = fitRoute || coordinator.lastCameraMode != cameraMode
                 || coordinator.lastCameraRequestID != cameraRequestID
             guard needsFocus else { return }
-            fit(polyline, on: map, animated: !fitRoute)
+            map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: !fitRoute)
+            coordinator.hasSetInitialRegion = true
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
 
@@ -104,23 +144,37 @@ struct RouteMapView: UIViewRepresentable {
                                    longitudinalMeters: 1_200),
                 animated: true
             )
+            coordinator.hasSetInitialRegion = true
+            coordinator.hasSetUserRegion = true
             coordinator.lastCameraMode = cameraMode
             coordinator.lastCameraRequestID = cameraRequestID
         }
     }
 
-    private func fit(_ polyline: MKPolyline, on map: MKMapView, animated: Bool) {
-        map.setVisibleMapRect(polyline.boundingMapRect,
-                              edgePadding: UIEdgeInsets(top: 130, left: 34, bottom: 230, right: 34),
-                              animated: animated)
+    /// 由 boundingMapRect 计算带边距的 region,避免依赖地图已布局的 edgePadding fit。
+    private func paddedRegion(for rect: MKMapRect, scale: Double, minDelta: Double = 0) -> MKCoordinateRegion {
+        var region = MKCoordinateRegion(rect)
+        region.span.latitudeDelta = min(max(region.span.latitudeDelta * scale, minDelta), 160)
+        region.span.longitudeDelta = min(max(region.span.longitudeDelta * scale, minDelta), 340)
+        return region
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var isOffRoute = false
         var lastCameraMode: RouteMapCameraMode?
         var lastCameraRequestID: Int?
+        var hasSetInitialRegion = false
+        var hasSetUserRegion = false
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let guide = overlay as? GuidePolyline {
+                let renderer = MKPolylineRenderer(polyline: guide)
+                renderer.strokeColor = UIColor(WDColor.amber)
+                renderer.lineWidth = 3
+                renderer.lineDashPattern = [8, 6]
+                renderer.lineJoin = .round
+                return renderer
+            }
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
                 renderer.strokeColor = isOffRoute ? .systemOrange : UIColor(WDColor.bamboo)
@@ -139,6 +193,18 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let annotation = annotation as? EndpointAnnotation {
+                let identifier = annotation.isStart ? "route-start-flag" : "route-end-flag"
+                let marker = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                marker.annotation = annotation
+                marker.canShowCallout = false
+                marker.glyphImage = UIImage(systemName: annotation.isStart ? "flag.fill" : "flag.checkered")
+                marker.markerTintColor = annotation.isStart ? UIColor(WDColor.bamboo) : UIColor(WDColor.ink)
+                marker.displayPriority = .required
+                return marker
+            }
+
             if let annotation = annotation as? UserNavigationAnnotation {
                 let identifier = "user-navigation-position"
                 let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKAnnotationView)
@@ -166,6 +232,21 @@ struct RouteMapView: UIViewRepresentable {
                 : UIColor(WDColor.bamboo)
             return marker
         }
+    }
+}
+
+/// 用户当前位置 → 路线起点的虚线引导(区别于主路线实线)。
+private final class GuidePolyline: MKPolyline {}
+
+/// 路线起点 / 终点旗标。
+private final class EndpointAnnotation: NSObject, MKAnnotation {
+    dynamic var coordinate: CLLocationCoordinate2D
+    let isStart: Bool
+    var title: String? { isStart ? "起点" : "终点" }
+
+    init(coordinate: CLLocationCoordinate2D, isStart: Bool) {
+        self.coordinate = coordinate
+        self.isStart = isStart
     }
 }
 

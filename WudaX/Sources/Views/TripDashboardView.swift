@@ -1,31 +1,43 @@
 import SwiftUI
 import MapKit
 
-// MARK: - 阶段三：行中仪表 + Agent 主动问询
+// MARK: - 阶段三:实时行程页 —— 全屏大地图 + 常驻计时/剩余距离面板
+// 出发后先引导前往路线起点(虚线),到达起点自动开始计时与记录;
+// 记录中常驻显示计时、剩余公里、已行进,详情卡片收进 sheet。
 
 struct TripDashboardView: View {
     @EnvironmentObject var session: TripSession
+    @State private var cameraMode: RouteMapCameraMode = .automatic
+    @State private var cameraRequestID = 0
+    @State private var showDetailSheet = false
+    @State private var showEndConfirm = false
+    @State private var locationRevision = 0
+    @State private var pulsing = false
+
+    private var routePoints: [GPXTrackPoint] {
+        session.planning.analyzedGPX?.document.points ?? []
+    }
+
+    private var isToStart: Bool {
+        if case .toStart = session.trackingState { return true }
+        return false
+    }
 
     var body: some View {
+        // 显式订阅嵌套的 LocationService,让地图与面板随定位实时重绘。
+        let _ = locationRevision
         ZStack {
+            fullScreenMap
+
             VStack(spacing: 0) {
-                header
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        progressCard
-                        routeMatchingCard
-                        if let d = session.lastDecision { verdictCard(d) }
-                        if let document = session.planning.analyzedGPX?.document { routeMapCard(document) }
-                        resourceCard
-                        if !session.events.isEmpty { eventCard }
-                        watchPreview
-                        GhostButton(title: "结束行程", color: WDColor.mist) {
-                            session.endTrip(retreated: false)
-                        }
-                    }
-                    .padding(22)
-                }
+                statusPill
+                    .padding(.top, 8)
+                Spacer()
+                mapControls
+                    .padding(.bottom, 10)
+                bottomPanel
             }
+            .padding(.horizontal, 16)
             .blur(radius: session.activeCheckin != nil ? 6 : 0)
 
             if let trigger = session.activeCheckin {
@@ -33,26 +45,311 @@ struct TripDashboardView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .sheet(isPresented: $showDetailSheet) {
+            TripDetailSheet()
+                .presentationDetents([.medium, .large])
+                .presentationBackground(WDColor.inkPine)
+        }
         .sheet(isPresented: $session.showRetreatSheet) {
             RetreatDecisionView()
                 .presentationDetents([.large])
                 .presentationBackground(WDColor.inkPine)
         }
+        .confirmationDialog("结束这次行程？", isPresented: $showEndConfirm, titleVisibility: .visible) {
+            Button("结束并生成复盘", role: .destructive) { session.endTrip(retreated: false) }
+            Button("继续行程", role: .cancel) {}
+        } message: {
+            Text("结束后本次记录会保存到这条路线的行走记录里。")
+        }
+        .onAppear { pulsing = true }
+        .onReceive(session.location.objectWillChange) { _ in
+            locationRevision &+= 1
+        }
     }
 
-    private var header: some View {
-        VStack(spacing: 4) {
-            HStack {
-                Circle().fill(WDColor.bamboo).frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(WDColor.bamboo.opacity(0.4), lineWidth: 5))
-                Text("行程进行中")
-                    .font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
-                Spacer()
-                Text("距日落 \(String(format: "%.1f", session.status.hoursToSunset)) h")
-                    .font(WDFont.mono(13)).foregroundStyle(
-                        session.status.hoursToSunset < 3 ? WDColor.amber : WDColor.mist)
+    // MARK: 全屏地图
+
+    @ViewBuilder
+    private var fullScreenMap: some View {
+        if routePoints.count >= 2 {
+            RouteMapView(
+                points: routePoints,
+                currentCoordinate: session.location.latestLocation?.coordinate,
+                userHeadingDegrees: session.location.headingDegrees,
+                matchedCoordinate: session.routeMatch?.matchedCoordinate,
+                horizontalAccuracyMeters: session.location.latestLocation?.horizontalAccuracy,
+                matchConfidence: session.routeMatch?.confidence,
+                isOffRoute: session.routeMatch?.isOffRoute ?? false,
+                cameraMode: cameraMode,
+                cameraRequestID: cameraRequestID,
+                showsEndpointFlags: true,
+                guideLineToStart: isToStart
+            )
+            .ignoresSafeArea()
+        } else {
+            ZStack {
+                WDColor.inkPine.ignoresSafeArea()
+                ContourBackground().ignoresSafeArea()
+                VStack(spacing: 10) {
+                    Image(systemName: "map")
+                        .font(.system(size: 38, weight: .ultraLight)).foregroundStyle(WDColor.mist.opacity(0.5))
+                    Text("本次行程没有加载 GPX 路线").font(WDFont.body(14)).foregroundStyle(WDColor.mist)
+                }
             }
-            .padding(.horizontal, 22).padding(.vertical, 14)
+        }
+    }
+
+    // MARK: 顶部状态胶囊
+
+    private var statusPill: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(isToStart ? WDColor.amber : WDColor.bamboo)
+                .frame(width: 9, height: 9)
+                .overlay(
+                    Circle()
+                        .stroke((isToStart ? WDColor.amber : WDColor.bamboo).opacity(0.4), lineWidth: 5)
+                        .scaleEffect(pulsing ? 1.6 : 0.9)
+                        .opacity(pulsing ? 0 : 1)
+                        .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false), value: pulsing)
+                )
+            Text(statusTitle)
+                .font(WDFont.heading(15)).foregroundStyle(WDColor.ricePaper)
+            Spacer()
+            Text("距日落 \(String(format: "%.1f", session.status.hoursToSunset)) h")
+                .font(WDFont.mono(12)).foregroundStyle(
+                    session.status.hoursToSunset < 3 ? WDColor.amber : WDColor.mist)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+        .background(
+            Capsule().fill(WDColor.deepMoss.opacity(0.96))
+                .overlay(Capsule().stroke(WDColor.line.opacity(0.7), lineWidth: 1))
+                .shadow(color: WDColor.ink.opacity(0.10), radius: 12, y: 5)
+        )
+    }
+
+    private var statusTitle: String {
+        switch session.trackingState {
+        case .waitingGPS: "等待 GPS 定位"
+        case .toStart: "前往路线起点"
+        case .recording: "行程进行中"
+        }
+    }
+
+    // MARK: 地图相机控制
+
+    private var mapControls: some View {
+        HStack {
+            Spacer()
+            VStack(spacing: 8) {
+                mapControlButton("arrow.up.left.and.arrow.down.right", selected: cameraMode == .route) {
+                    cameraMode = .route
+                    cameraRequestID += 1
+                    Haptics.tap()
+                }
+                mapControlButton("location.fill", selected: cameraMode == .automatic) {
+                    cameraMode = .automatic
+                    cameraRequestID += 1
+                    Haptics.tap()
+                }
+            }
+        }
+    }
+
+    private func mapControlButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(selected ? WDColor.onDark : WDColor.ricePaper)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle().fill(selected ? WDColor.ink : WDColor.deepMoss.opacity(0.96))
+                        .overlay(Circle().stroke(WDColor.line.opacity(selected ? 0 : 0.8), lineWidth: 1))
+                        .shadow(color: WDColor.ink.opacity(0.12), radius: 8, y: 4)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: 底部实时数据面板
+
+    private var bottomPanel: some View {
+        VStack(spacing: 14) {
+            switch session.trackingState {
+            case .recording: recordingStats
+            case .toStart(let distance): toStartStats(distance)
+            case .waitingGPS: waitingStats
+            }
+
+            HStack(spacing: 10) {
+                Button { showDetailSheet = true } label: {
+                    Label("详情", systemImage: "list.bullet.rectangle")
+                        .font(WDFont.body(15).weight(.medium))
+                        .foregroundStyle(WDColor.ricePaper)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(RoundedRectangle(cornerRadius: 14).stroke(WDColor.line, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                Button { showEndConfirm = true } label: {
+                    Label("结束", systemImage: "xmark")
+                        .font(WDFont.body(15).weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(WDColor.cinnabar))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(WDColor.deepMoss.opacity(0.97))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(WDColor.line.opacity(0.7), lineWidth: 1))
+                .shadow(color: WDColor.ink.opacity(0.14), radius: 18, y: 8)
+        )
+        .padding(.bottom, 8)
+    }
+
+    /// 记录中:计时 + 剩余公里 + 已行进,每秒刷新。
+    private var recordingStats: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(spacing: 12) {
+                HStack(spacing: 0) {
+                    bigStat(label: "计时", value: elapsedText(at: context.date), tint: WDColor.bamboo)
+                    statDivider
+                    bigStat(label: "剩余(km)", value: remainingKmText, tint: WDColor.ink)
+                    statDivider
+                    bigStat(label: "已行进(km)", value: String(format: "%.1f", session.status.elapsedKm), tint: WDColor.ink)
+                }
+                HStack(spacing: 12) {
+                    smallStat("clock.badge.checkmark", "预计到达 \(etaText)")
+                    if let match = session.routeMatch {
+                        smallStat("mountain.2", "剩余爬升 \(Int(match.remainingAscentMeters.rounded())) m")
+                    }
+                    smallStat("antenna.radiowaves.left.and.right", gpsText,
+                              tint: session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
+                    Spacer()
+                }
+                if session.routeMatch?.isOffRoute == true {
+                    Label("可能偏离路线,距路线约 \(Int((session.routeMatch?.distanceToRouteMeters ?? 0).rounded())) m",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(WDFont.caption(11).weight(.semibold)).foregroundStyle(WDColor.amber)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// 未到起点:显示距起点距离与虚线引导提示。
+    private func toStartStats(_ distanceMeters: Double) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(distanceText(distanceMeters))
+                    .font(WDFont.mono(30)).foregroundStyle(WDColor.amber)
+                    .contentTransition(.numericText())
+                Text("距路线起点").font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+            Rectangle().fill(WDColor.line).frame(width: 1, height: 42)
+            VStack(alignment: .leading, spacing: 4) {
+                Label("沿虚线走向起点旗标", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(WDFont.body(13).weight(.medium)).foregroundStyle(WDColor.ricePaper)
+                Text("到达起点后自动开始计时与记录")
+                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+            Spacer()
+        }
+    }
+
+    private var waitingStats: some View {
+        HStack(spacing: 12) {
+            ProgressView().tint(WDColor.bamboo)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("等待第一个可用 GPS 定位").font(WDFont.body(14).weight(.medium)).foregroundStyle(WDColor.ricePaper)
+                Text("路线已在本地准备;定位后开始引导").font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            }
+            Spacer()
+        }
+    }
+
+    private func bigStat(label: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(WDFont.mono(24)).foregroundStyle(tint)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+            Text(label).font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var statDivider: some View {
+        Rectangle().fill(WDColor.line).frame(width: 1, height: 38)
+    }
+
+    private func smallStat(_ icon: String, _ text: String, tint: Color = WDColor.mist) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 10)).foregroundStyle(tint)
+            Text(text).font(WDFont.caption(11)).foregroundStyle(tint)
+        }
+    }
+
+    // MARK: 文案
+
+    private func elapsedText(at now: Date) -> String {
+        guard let start = session.hikeStartDate else { return "00:00:00" }
+        let seconds = max(Int(now.timeIntervalSince(start)), 0)
+        return String(format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+    }
+
+    private var remainingKmText: String {
+        guard let remaining = session.remainingDistanceKm else { return "—" }
+        return String(format: "%.2f", remaining)
+    }
+
+    private var etaText: String {
+        guard let eta = session.estimatedFinishDate else { return "—" }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: eta)
+    }
+
+    private var gpsText: String {
+        guard session.location.isMonitoring else { return "GPS 未连接" }
+        switch session.routeMatch?.confidence {
+        case .some(.high): return "GPS · 高置信"
+        case .some(.medium): return "GPS · 中置信"
+        case .some(.low): return "GPS · 低置信"
+        case .some(.none), nil: return "GPS 已连接"
+        }
+    }
+
+    private func distanceText(_ meters: Double) -> String {
+        meters >= 1_000 ? String(format: "%.1f km", meters / 1_000) : "\(Int(meters.rounded())) m"
+    }
+}
+
+// MARK: - 详情 sheet:海拔剖面 / 路线匹配 / 事件 / 资源 / 手表同步
+
+private struct TripDetailSheet: View {
+    @EnvironmentObject var session: TripSession
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("行程详情").font(WDFont.heading(18)).foregroundStyle(WDColor.ricePaper)
+                    .padding(.top, 20)
+                progressCard
+                routeMatchingCard
+                if let d = session.lastDecision { verdictCard(d) }
+                resourceCard
+                if !session.events.isEmpty { eventCard }
+                watchPreview
+                Spacer(minLength: 30)
+            }
+            .padding(22)
         }
     }
 
@@ -203,32 +500,6 @@ struct TripDashboardView: View {
         }
     }
 
-    private func routeMapCard(_ document: GPXDocument) -> some View {
-        InkCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label("实时路线", systemImage: "map")
-                        .font(WDFont.heading(15)).foregroundStyle(WDColor.ricePaper)
-                    Spacer()
-                    Text("GPS \(session.location.isMonitoring ? "已连接" : "等待授权")")
-                        .font(WDFont.caption()).foregroundStyle(session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
-                }
-                RouteMapView(
-                    points: document.points,
-                    currentCoordinate: session.location.latestLocation?.coordinate,
-                    matchedCoordinate: session.routeMatch?.matchedCoordinate,
-                    horizontalAccuracyMeters: session.location.latestLocation?.horizontalAccuracy,
-                    matchConfidence: session.routeMatch?.confidence,
-                    isOffRoute: session.routeMatch?.isOffRoute ?? false
-                )
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                Text("路线线条、候选段匹配和偏航判断来自本地 GPX；无地图瓦片时仍可工作。")
-                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
-            }
-        }
-    }
-
     private var eventCard: some View {
         InkCard {
             VStack(alignment: .leading, spacing: 10) {
@@ -272,7 +543,7 @@ struct TripDashboardView: View {
                 .frame(width: 165, height: 130)
                 .background(
                     RoundedRectangle(cornerRadius: 32)
-                        .fill(Color.black)
+                        .fill(WDColor.nightSurface)
                         .overlay(RoundedRectangle(cornerRadius: 32)
                             .stroke(WDColor.mossSurface, lineWidth: 3))
                 )

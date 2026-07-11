@@ -207,6 +207,24 @@ struct StatChip: View {
     }
 }
 
+// MARK: - 勾选样式(装备清单确认用)
+
+struct CheckToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle(); Haptics.tap() } label: {
+            HStack {
+                configuration.label
+                Spacer()
+                Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 21, weight: .light))
+                    .foregroundStyle(configuration.isOn ? WDColor.bamboo : WDColor.mist.opacity(0.5))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - 0-10 打分滑条
 
 struct ScaleQuestion: View {

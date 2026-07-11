@@ -36,9 +36,6 @@ struct RootView: View {
             case .budgetCard:
                 BudgetCardView()
                     .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .opacity))
-            case .gate:
-                GatekeeperView()
-                    .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .opacity))
             case .inTrip:
                 TripDashboardView()
                     .transition(.opacity)
@@ -55,9 +52,8 @@ struct RootView: View {
         case .home: 0
         case .planningChat: 1
         case .budgetCard: 2
-        case .gate: 3
-        case .inTrip: 4
-        case .review: 5
+        case .inTrip: 3
+        case .review: 4
         }
     }
 }
