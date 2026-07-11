@@ -3,6 +3,28 @@ import SwiftUI
 import Combine
 import CoreLocation
 
+/// 行程只能在可靠地到达 GPX 起点后开始；连续确认可避免单次 GPS 漂移误触发。
+struct TripStartGate {
+    static let maximumDistanceMeters: Double = 60
+    static let maximumHorizontalAccuracyMeters: Double = 50
+    static let requiredConsecutiveFixes = 2
+
+    private(set) var consecutiveFixes = 0
+
+    mutating func register(distanceMeters: Double, horizontalAccuracyMeters: Double) -> Bool {
+        let qualifies = distanceMeters.isFinite
+            && horizontalAccuracyMeters.isFinite
+            && distanceMeters >= 0
+            && distanceMeters <= Self.maximumDistanceMeters
+            && horizontalAccuracyMeters >= 0
+            && horizontalAccuracyMeters <= Self.maximumHorizontalAccuracyMeters
+        consecutiveFixes = qualifies ? consecutiveFixes + 1 : 0
+        return consecutiveFixes >= Self.requiredConsecutiveFixes
+    }
+
+    mutating func reset() { consecutiveFixes = 0 }
+}
+
 // MARK: - 行程会话：贯穿五阶段的状态机
 
 @MainActor
@@ -61,18 +83,21 @@ final class TripSession: ObservableObject {
     private var lastOffRouteEventAt: Date?
     private var routeMatcher: GPXRouteMatcher?
     private var lastRouteLocationAt: Date?
+    private var startGate = TripStartGate()
     /// 本次规划/行程对应路线库中的记录:入口 1 为所选历史记录,入口 2 为新入库记录。
     /// 行程结束时写进 StoredTrip.routeRecordID,作为该路线的行走 log。
     private(set) var activeRouteRecordID: UUID?
     /// 距路线起点多近视为「到达起点」,自动开始记录。
-    static let startProximityMeters: Double = 60
+    static let startProximityMeters = TripStartGate.maximumDistanceMeters
 
     var routeStartCoordinate: RouteCoordinate? { preparedRoute?.vertices.first?.coordinate }
     var routeEndCoordinate: RouteCoordinate? { preparedRoute?.vertices.last?.coordinate }
 
     /// 剩余距离(km):优先用路线匹配结果,退化为 总长 − 已行进。
     var remainingDistanceKm: Double? {
-        if let match = routeMatch { return match.remainingDistanceMeters / 1_000 }
+        if trackingState == .recording, let match = routeMatch {
+            return match.remainingDistanceMeters / 1_000
+        }
         guard let total = preparedRoute?.totalDistanceMeters else { return nil }
         return max(total / 1_000 - status.elapsedKm, 0)
     }
@@ -247,6 +272,7 @@ final class TripSession: ObservableObject {
         lastOffRouteEventAt = nil
         routeMatch = nil
         lastRouteLocationAt = nil
+        startGate.reset()
         hikeStartDate = nil
         trackingState = .waitingGPS
         if let preparedRoute {
@@ -344,9 +370,11 @@ final class TripSession: ObservableObject {
     }
 
     private func handleLocation(_ location: CLLocation) {
-        recorder.append(location)
         guard phase == .inTrip else { return }
         if trackingState != .recording { updateApproach(with: location) }
+        // 到达起点前只更新“距起点距离”，不匹配路线、不记录轨迹，也不更新整体进度。
+        guard trackingState == .recording else { return }
+        recorder.append(location)
         guard let routeMatcher else { return }
         let input = RouteLocationInput(
             coordinate: RouteCoordinate(latitude: location.coordinate.latitude,
@@ -359,7 +387,7 @@ final class TripSession: ObservableObject {
             cadenceStepsPerMinute: nil
         )
         lastRouteLocationAt = location.timestamp
-        applyRouteMatch(routeMatcher.match(input), allowOffRouteAlert: trackingState == .recording)
+        applyRouteMatch(routeMatcher.match(input), allowOffRouteAlert: true)
         evaluateActiveStatus()
     }
 
@@ -371,16 +399,24 @@ final class TripSession: ObservableObject {
         }
         let distance = CLLocation(latitude: start.latitude, longitude: start.longitude)
             .distance(from: location)
-        if distance <= Self.startProximityMeters {
+        if startGate.register(distanceMeters: distance,
+                              horizontalAccuracyMeters: location.horizontalAccuracy) {
             beginRecording(at: location.timestamp)
         } else {
             trackingState = .toStart(distanceMeters: distance)
         }
     }
 
-    /// 到达起点(或确认已在路线上)后才真正开始:计时、轨迹记录、剩余距离都以此为起点。
+    /// 连续确认到达路线起点后才真正开始：计时、轨迹记录、剩余距离都以此为起点。
     private func beginRecording(at date: Date = Date()) {
         guard trackingState != .recording else { return }
+        startGate.reset()
+        routeMatch = nil
+        lastRouteLocationAt = nil
+        status.elapsedKm = 0
+        status.elapsedHours = 0
+        status.profileIndex = 0
+        status.planDeltaMin = 0
         trackingState = .recording
         hikeStartDate = date
         recorder.start()
@@ -390,14 +426,8 @@ final class TripSession: ObservableObject {
     }
 
     private func applyRouteMatch(_ match: RouteMatchResult, allowOffRouteAlert: Bool) {
-        routeMatch = match
-        // 中途汇入路线(如从半程加入)也视为开始:匹配高置信且贴线。
-        if trackingState != .recording,
-           match.confidence == .high,
-           match.distanceToRouteMeters <= Self.startProximityMeters {
-            beginRecording()
-        }
         guard trackingState == .recording else { return }
+        routeMatch = match
         let statusProgressMeters: Double = switch match.confidence {
         case .high, .medium: match.routeProgressMeters
         case .low, .none: match.lastReliableProgressMeters
