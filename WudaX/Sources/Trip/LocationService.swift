@@ -9,6 +9,7 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     @Published private(set) var authorizationState: AuthorizationState = .notDetermined
     @Published private(set) var latestLocation: CLLocation?
+    @Published private(set) var latestHeading: CLHeading?
     @Published private(set) var isMonitoring = false
     var onLocationUpdate: ((CLLocation) -> Void)?
 
@@ -20,6 +21,7 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 10
+        manager.headingFilter = 3
         updateAuthorizationState(manager.authorizationStatus)
     }
 
@@ -44,6 +46,9 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
         isMonitoring = true
     }
 
@@ -56,6 +61,7 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     func stopMonitoring() {
         manager.stopUpdatingLocation()
+        manager.stopUpdatingHeading()
         isMonitoring = false
     }
 
@@ -73,6 +79,17 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
         guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
         latestLocation = location
         onLocationUpdate?(location)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        guard newHeading.headingAccuracy >= 0 else { return }
+        latestHeading = newHeading
+    }
+
+    /// 优先使用真北方向；设备尚未校准时回退到磁北方向。
+    var headingDegrees: CLLocationDirection? {
+        guard let latestHeading else { return nil }
+        return latestHeading.trueHeading >= 0 ? latestHeading.trueHeading : latestHeading.magneticHeading
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

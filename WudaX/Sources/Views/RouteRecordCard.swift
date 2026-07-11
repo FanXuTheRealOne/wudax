@@ -3,6 +3,7 @@ import SwiftUI
 /// 首页「历史 GPX 记录」列表卡片。
 struct RouteRecordCard: View {
     let record: RouteRecord
+    var onMapTap: (() -> Void)?
 
     private var dateText: String {
         let f = DateFormatter()
@@ -13,10 +14,7 @@ struct RouteRecordCard: View {
     var body: some View {
         InkCard {
             HStack(spacing: 14) {
-                RouteShapeThumbnail(coordinates: record.coordinates, stroke: record.riskLevel.color)
-                    .frame(width: 74, height: 74)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                miniMap
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .top) {
@@ -38,6 +36,33 @@ struct RouteRecordCard: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13)).foregroundStyle(WDColor.mist.opacity(0.7))
             }
+        }
+    }
+
+    @ViewBuilder
+    private var miniMap: some View {
+        let preview = ZStack(alignment: .bottomLeading) {
+            RouteShapeThumbnail(coordinates: record.coordinates, stroke: record.riskLevel.color)
+                .padding(8)
+            HStack(spacing: 4) {
+                Image(systemName: "map.fill").font(.system(size: 8, weight: .semibold))
+                Text("地图").font(WDFont.caption(9).weight(.semibold))
+            }
+            .foregroundStyle(WDColor.ricePaper)
+            .padding(.horizontal, 7).padding(.vertical, 5)
+            .background(.black.opacity(0.46), in: Capsule())
+            .padding(6)
+        }
+        .frame(width: 82, height: 74)
+        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+        if let onMapTap {
+            Button(action: onMapTap) { preview }
+                .buttonStyle(.plain)
+                .accessibilityLabel("在地图中查看 \(record.name)")
+        } else {
+            preview
         }
     }
 
