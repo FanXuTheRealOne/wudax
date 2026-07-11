@@ -33,10 +33,17 @@ struct HomeView: View {
         .sheet(isPresented: $showChat) { ChatView() }
         .sheet(isPresented: $showAllRoutes) { AllRoutesView() }
         .sheet(item: $detailRecord) { record in
-            RouteDetailView(record: record) {
-                detailRecord = nil
-                session.planRecord(record)
-            }
+            RouteDetailView(
+                record: record,
+                onStartPlanning: {
+                    detailRecord = nil
+                    session.planRecord(record)
+                },
+                onOpenMap: {
+                    detailRecord = nil
+                    navigation.showRouteOnMap(record)
+                }
+            )
         }
         .alert("重命名路线", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("路线名称", text: $newName)

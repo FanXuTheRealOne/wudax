@@ -7,6 +7,15 @@ struct RouteDetailView: View {
     @EnvironmentObject var session: TripSession
     let record: RouteRecord
     let onStartPlanning: () -> Void
+    let onOpenMap: () -> Void
+
+    init(record: RouteRecord,
+         onStartPlanning: @escaping () -> Void,
+         onOpenMap: @escaping () -> Void = {}) {
+        self.record = record
+        self.onStartPlanning = onStartPlanning
+        self.onOpenMap = onOpenMap
+    }
 
     private var prov: RouteProvenance { record.provenance }
     /// 这条路线的每一次行走记录(真实持久化数据,最近一次在前)。
@@ -23,6 +32,11 @@ struct RouteDetailView: View {
                             .frame(height: 260)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                             .overlay(RoundedRectangle(cornerRadius: 18).stroke(WDColor.mossSurface, lineWidth: 1))
+
+                        GhostButton(title: "在主地图中查看", color: WDColor.bamboo) {
+                            dismiss()
+                            onOpenMap()
+                        }
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text(record.name).font(WDFont.title(24)).foregroundStyle(WDColor.ricePaper)

@@ -9,7 +9,8 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
 
     @Published private(set) var authorizationState: AuthorizationState = .notDetermined
     @Published private(set) var latestLocation: CLLocation?
-    @Published private(set) var latestHeading: CLHeading?
+    private(set) var latestHeading: CLHeading?
+    @Published private(set) var headingDegrees: CLLocationDirection?
     @Published private(set) var isMonitoring = false
     var onLocationUpdate: ((CLLocation) -> Void)?
 
@@ -21,7 +22,8 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 10
-        manager.headingFilter = 3
+        // 地图导航需要连续朝向；后续用低通滤波消除罗盘抖动，而不是粗粒度丢弃更新。
+        manager.headingFilter = kCLHeadingFilterNone
         updateAuthorizationState(manager.authorizationStatus)
     }
 
@@ -84,12 +86,17 @@ final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocat
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         guard newHeading.headingAccuracy >= 0 else { return }
         latestHeading = newHeading
+        let rawHeading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        headingDegrees = smoothedHeading(from: rawHeading, previous: headingDegrees)
     }
 
-    /// 优先使用真北方向；设备尚未校准时回退到磁北方向。
-    var headingDegrees: CLLocationDirection? {
-        guard let latestHeading else { return nil }
-        return latestHeading.trueHeading >= 0 ? latestHeading.trueHeading : latestHeading.magneticHeading
+    /// 以最短角度路径平滑朝向，避免 359° → 0° 时发生反向跳转。
+    private func smoothedHeading(from raw: CLLocationDirection,
+                                 previous: CLLocationDirection?) -> CLLocationDirection {
+        guard let previous else { return raw }
+        let delta = (raw - previous + 540).truncatingRemainder(dividingBy: 360) - 180
+        let smoothed = (previous + delta * 0.35).truncatingRemainder(dividingBy: 360)
+        return smoothed < 0 ? smoothed + 360 : smoothed
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
