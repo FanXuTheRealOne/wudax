@@ -10,7 +10,7 @@ struct WudaXApp: App {
             RootView()
                 .environmentObject(session)
                 .environmentObject(library)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(.light)
                 .onAppear { session.library = library }
         }
     }

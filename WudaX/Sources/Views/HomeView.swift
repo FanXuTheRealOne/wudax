@@ -53,15 +53,14 @@ struct HomeView: View {
 
     private var mountainHeader: some View {
         Group {
-            if let ui = UIImage(named: "ink_mountains") {
+            if let ui = UIImage(named: "hero_morning") ?? UIImage(named: "ink_mountains") {
                 Image(uiImage: ui)
                     .resizable().scaledToFill()
-                    .frame(height: 300).frame(maxWidth: .infinity).clipped()
+                    .frame(height: 340).frame(maxWidth: .infinity).clipped()
                     .mask(LinearGradient(stops: [.init(color: .black, location: 0),
-                                                 .init(color: .black, location: 0.6),
+                                                 .init(color: .black, location: 0.62),
                                                  .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
-                    .opacity(0.85)
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -86,7 +85,7 @@ struct HomeView: View {
     private var startPlanningRow: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("行 程").font(WDFont.title(34)).foregroundStyle(WDColor.ricePaper)
+                Text("行 程").font(WDFont.title(34)).foregroundStyle(WDColor.onDark)
                 Rectangle().fill(WDColor.amber).frame(width: 44, height: 2.5)
             }
             Spacer()
@@ -96,10 +95,10 @@ struct HomeView: View {
                     Text("开始规划").font(WDFont.heading(16))
                     Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(WDColor.ricePaper)
+                .foregroundStyle(WDColor.onDark)
                 .padding(.horizontal, 18).padding(.vertical, 16)
-                .background(RoundedRectangle(cornerRadius: 16).fill(WDColor.deepMoss.opacity(0.92))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(WDColor.amber.opacity(0.35), lineWidth: 1)))
+                .background(RoundedRectangle(cornerRadius: 16).fill(WDColor.ink)
+                    .shadow(color: WDColor.ink.opacity(0.22), radius: 10, y: 6))
             }
             .buttonStyle(.plain)
         }

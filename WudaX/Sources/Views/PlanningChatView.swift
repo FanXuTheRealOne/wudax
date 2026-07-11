@@ -81,11 +81,11 @@ struct PlanningChatView: View {
                     }
                     Text(item.text)
                         .font(WDFont.body(item.role == .status ? 12.5 : 14))
-                        .foregroundStyle(item.role == .user ? WDColor.ink : WDColor.ricePaper)
+                        .foregroundStyle(item.role == .user ? WDColor.onDark : WDColor.ricePaper)
                         .padding(.horizontal, item.role == .user ? 14 : 0)
                         .padding(.vertical, item.role == .user ? 9 : 0)
                         .background {
-                            if item.role == .user { Capsule().fill(WDColor.ricePaper) }
+                            if item.role == .user { Capsule().fill(WDColor.ink) }
                         }
                         .frame(maxWidth: .infinity, alignment: item.role == .user ? .trailing : .leading)
                 }
@@ -254,8 +254,8 @@ struct PlanningChatView: View {
         HStack {
             Text(item.q).font(WDFont.caption()).foregroundStyle(WDColor.mist)
             Spacer()
-            Text(item.a).font(WDFont.body(13).weight(.medium)).foregroundStyle(WDColor.ink)
-                .padding(.horizontal, 12).padding(.vertical, 7).background(Capsule().fill(WDColor.ricePaper))
+            Text(item.a).font(WDFont.body(13).weight(.medium)).foregroundStyle(WDColor.ricePaper)
+                .padding(.horizontal, 12).padding(.vertical, 7).background(Capsule().fill(WDColor.mossSurface))
         }
     }
 

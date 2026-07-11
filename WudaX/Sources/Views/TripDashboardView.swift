@@ -259,7 +259,7 @@ struct TripDashboardView: View {
                         .foregroundStyle(WDColor.mist)
                     Text(session.lastDecision?.watchHint ?? "状态良好，按计划继续。")
                         .font(WDFont.body(12).weight(.medium))
-                        .foregroundStyle(WDColor.ricePaper)
+                        .foregroundStyle(WDColor.onDark)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
                     HStack(spacing: 6) {

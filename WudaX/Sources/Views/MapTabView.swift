@@ -34,10 +34,11 @@ struct MapTabView: View {
                     Button { selectedID = record.id } label: {
                         Text(record.name)
                             .font(WDFont.body(13).weight(.medium))
-                            .foregroundStyle(active ? WDColor.ink : WDColor.ricePaper)
+                            .foregroundStyle(active ? WDColor.onDark : WDColor.ricePaper)
                             .lineLimit(1)
                             .padding(.horizontal, 14).padding(.vertical, 9)
-                            .background(Capsule().fill(active ? WDColor.ricePaper : WDColor.deepMoss.opacity(0.9)))
+                            .background(Capsule().fill(active ? WDColor.ink : WDColor.deepMoss.opacity(0.95))
+                                .overlay(Capsule().stroke(WDColor.line, lineWidth: active ? 0 : 1)))
                     }
                     .buttonStyle(.plain)
                 }
