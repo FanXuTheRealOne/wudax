@@ -84,6 +84,7 @@ final class TripSession: ObservableObject {
     private var routeMatcher: GPXRouteMatcher?
     private var lastRouteLocationAt: Date?
     private var startGate = TripStartGate()
+    private var lastHealthRefreshAt: Date?
     /// 本次规划/行程对应路线库中的记录:入口 1 为所选历史记录,入口 2 为新入库记录。
     /// 行程结束时写进 StoredTrip.routeRecordID,作为该路线的行走 log。
     private(set) var activeRouteRecordID: UUID?
@@ -273,6 +274,7 @@ final class TripSession: ObservableObject {
         routeMatch = nil
         lastRouteLocationAt = nil
         startGate.reset()
+        lastHealthRefreshAt = nil
         hikeStartDate = nil
         trackingState = .waitingGPS
         if let preparedRoute {
@@ -319,6 +321,7 @@ final class TripSession: ObservableObject {
     func connectAppleHealth() async -> HealthSnapshot? {
         _ = await planning.requestHealthAuthorization()
         latestHealthSnapshot = planning.healthSnapshot
+        lastHealthRefreshAt = Date()
         return latestHealthSnapshot
     }
 
@@ -343,6 +346,7 @@ final class TripSession: ObservableObject {
         guard phase == .inTrip, trackingState == .recording,
               activeCheckin == nil, !showRetreatSheet else { return }
         let now = Date()
+        refreshHealthSnapshotIfNeeded(at: now)
         if let hikeStartDate { status.elapsedHours = now.timeIntervalSince(hikeStartDate) / 3600 }
         if let routeMatcher,
            lastRouteLocationAt.map({ now.timeIntervalSince($0) >= 15 }) ?? false {
@@ -379,6 +383,17 @@ final class TripSession: ObservableObject {
             triggerCheckin(.timer)
         } else if status.planDeltaMin <= -30 && status.profileIndex > 8 {
             triggerCheckin(.slowProgress)
+        }
+    }
+
+    private func refreshHealthSnapshotIfNeeded(at date: Date) {
+        guard planning.healthKit.authorizationState == .granted,
+              lastHealthRefreshAt.map({ date.timeIntervalSince($0) >= 60 }) ?? true else { return }
+        lastHealthRefreshAt = date
+        Task { [weak self] in
+            guard let self else { return }
+            await self.planning.refreshHealthSnapshot()
+            self.latestHealthSnapshot = self.planning.healthSnapshot
         }
     }
 

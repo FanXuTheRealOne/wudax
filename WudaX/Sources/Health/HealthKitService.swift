@@ -93,8 +93,15 @@ final class HealthKitService: ObservableObject {
         var readings: [HealthMetric: HealthReading] = [:]
         var unavailable = Set(HealthMetric.allCases)
         for descriptor in quantityDescriptors {
-            guard let type = HKObjectType.quantityType(forIdentifier: descriptor.identifier),
-                  let result = await latestQuantity(type: type, unit: descriptor.unit, since: date.addingTimeInterval(-30 * 24 * 3600)) else { continue }
+            guard let type = HKObjectType.quantityType(forIdentifier: descriptor.identifier) else { continue }
+            let result: (value: Double, date: Date, sourceName: String?)? = switch descriptor.queryMode {
+            case .latest:
+                await latestQuantity(type: type, unit: descriptor.unit,
+                                     since: date.addingTimeInterval(-30 * 24 * 3600))
+            case .cumulativeToday:
+                await cumulativeQuantityToday(type: type, unit: descriptor.unit, asOf: date)
+            }
+            guard let result else { continue }
             let metric = descriptor.metric
             readings[metric] = HealthReading(value: result.value, unit: descriptor.unit.unitString,
                                               sampledAt: result.date, sourceName: result.sourceName,
@@ -190,6 +197,25 @@ final class HealthKitService: ObservableObject {
         }
     }
 
+    private func cumulativeQuantityToday(type: HKQuantityType,
+                                         unit: HKUnit,
+                                         asOf date: Date) async -> (value: Double, date: Date, sourceName: String?)? {
+        await withCheckedContinuation { continuation in
+            let start = Calendar.current.startOfDay(for: date)
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: date, options: .strictStartDate)
+            let query = HKStatisticsQuery(quantityType: type,
+                                          quantitySamplePredicate: predicate,
+                                          options: .cumulativeSum) { _, statistics, _ in
+                guard let quantity = statistics?.sumQuantity() else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: (quantity.doubleValue(for: unit), date, "Apple Health"))
+            }
+            self.store.execute(query)
+        }
+    }
+
     private func recentSleepDuration(asOf date: Date) async -> (value: Double, date: Date, sourceName: String?)? {
         guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return nil }
         return await withCheckedContinuation { continuation in
@@ -240,9 +266,15 @@ final class HealthKitService: ObservableObject {
     }
 
     private struct QuantityDescriptor {
+        enum QueryMode {
+            case latest
+            case cumulativeToday
+        }
+
         var metric: HealthMetric
         var identifier: HKQuantityTypeIdentifier
         var unit: HKUnit
+        var queryMode: QueryMode = .latest
     }
 
     private var quantityDescriptors: [QuantityDescriptor] {
@@ -252,11 +284,11 @@ final class HealthKitService: ObservableObject {
             .init(metric: .bmi, identifier: .bodyMassIndex, unit: .count()),
             .init(metric: .bodyFat, identifier: .bodyFatPercentage, unit: .percent()),
             .init(metric: .leanBodyMass, identifier: .leanBodyMass, unit: .gramUnit(with: .kilo)),
-            .init(metric: .steps, identifier: .stepCount, unit: .count()),
-            .init(metric: .walkingRunningDistance, identifier: .distanceWalkingRunning, unit: .meter()),
-            .init(metric: .flightsClimbed, identifier: .flightsClimbed, unit: .count()),
-            .init(metric: .activeEnergy, identifier: .activeEnergyBurned, unit: .kilocalorie()),
-            .init(metric: .exerciseTime, identifier: .appleExerciseTime, unit: .minute()),
+            .init(metric: .steps, identifier: .stepCount, unit: .count(), queryMode: .cumulativeToday),
+            .init(metric: .walkingRunningDistance, identifier: .distanceWalkingRunning, unit: .meter(), queryMode: .cumulativeToday),
+            .init(metric: .flightsClimbed, identifier: .flightsClimbed, unit: .count(), queryMode: .cumulativeToday),
+            .init(metric: .activeEnergy, identifier: .activeEnergyBurned, unit: .kilocalorie(), queryMode: .cumulativeToday),
+            .init(metric: .exerciseTime, identifier: .appleExerciseTime, unit: .minute(), queryMode: .cumulativeToday),
             .init(metric: .heartRate, identifier: .heartRate, unit: HKUnit.count().unitDivided(by: .minute())),
             .init(metric: .restingHeartRate, identifier: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())),
             .init(metric: .walkingHeartRateAverage, identifier: .walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute())),

@@ -31,6 +31,7 @@ struct MapTabView: View {
                     points: record.document.points,
                     currentCoordinate: session.location.latestLocation?.coordinate,
                     tracksUserLocation: true,
+                    userHeadingDegrees: session.location.headingDegrees,
                     cameraMode: cameraMode,
                     cameraRequestID: cameraRequestID,
                     mapLayer: mapLayer
