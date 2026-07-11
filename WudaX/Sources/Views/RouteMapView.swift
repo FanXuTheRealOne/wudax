@@ -502,7 +502,8 @@ private final class RouteEndpointAnnotation: NSObject, MKAnnotation {
 /// 参考 Apple 地图的定位 puck：蓝色圆点、白色外环与半透明朝向扇形。
 /// 不替换 annotation 实例，只更新 CALayer 路径，从而避免 heading 更新时闪烁。
 private final class UserNavigationPuckView: MKAnnotationView {
-    private let headingCone = CAShapeLayer()
+    private let headingGradient = CAGradientLayer()
+    private let headingConeMask = CAShapeLayer()
     private let halo = CAShapeLayer()
     private let whiteRing = CAShapeLayer()
     private let blueDot = CAShapeLayer()
@@ -522,6 +523,19 @@ private final class UserNavigationPuckView: MKAnnotationView {
     private func setupLayers() {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
 
+        headingGradient.frame = bounds
+        headingGradient.type = .radial
+        headingGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        headingGradient.endPoint = CGPoint(x: 0.96, y: 0.5)
+        headingGradient.colors = [
+            UIColor.systemBlue.withAlphaComponent(0.34).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0.18).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0).cgColor
+        ]
+        headingGradient.locations = [0, 0.52, 1]
+        headingConeMask.frame = headingGradient.bounds
+        headingGradient.mask = headingConeMask
+
         halo.path = UIBezierPath(ovalIn: CGRect(x: center.x - 17, y: center.y - 17, width: 34, height: 34)).cgPath
         halo.fillColor = UIColor.systemBlue.withAlphaComponent(0.16).cgColor
 
@@ -537,7 +551,7 @@ private final class UserNavigationPuckView: MKAnnotationView {
         blueDot.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
         blueDot.lineWidth = 1.2
 
-        layer.addSublayer(headingCone)
+        layer.addSublayer(headingGradient)
         layer.addSublayer(halo)
         layer.addSublayer(whiteRing)
         layer.addSublayer(blueDot)
@@ -545,34 +559,31 @@ private final class UserNavigationPuckView: MKAnnotationView {
 
     func update(headingDegrees: CLLocationDirection?) {
         guard let headingDegrees else {
-            headingCone.path = nil
+            headingConeMask.removeAllAnimations()
+            headingConeMask.path = nil
             return
         }
 
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let radians = CGFloat((headingDegrees - 90) * .pi / 180)
-        let spread: CGFloat = .pi / 5
-        let radius: CGFloat = 29
-        let left = CGPoint(x: center.x + cos(radians - spread) * radius,
-                           y: center.y + sin(radians - spread) * radius)
-        let tip = CGPoint(x: center.x + cos(radians) * radius,
-                          y: center.y + sin(radians) * radius)
-        let right = CGPoint(x: center.x + cos(radians + spread) * radius,
-                            y: center.y + sin(radians + spread) * radius)
+        let spread: CGFloat = .pi / 10
+        let radius: CGFloat = 27
         let path = UIBezierPath()
         path.move(to: center)
-        path.addLine(to: left)
-        path.addLine(to: tip)
-        path.addLine(to: right)
+        path.addArc(withCenter: center,
+                    radius: radius,
+                    startAngle: radians - spread,
+                    endAngle: radians + spread,
+                    clockwise: true)
         path.close()
 
         let animation = CABasicAnimation(keyPath: "path")
-        animation.fromValue = headingCone.presentation()?.path ?? headingCone.path
+        animation.fromValue = (headingConeMask.presentation() as? CAShapeLayer)?.path ?? headingConeMask.path
         animation.toValue = path.cgPath
-        animation.duration = 0.14
+        animation.duration = 0.12
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        headingCone.add(animation, forKey: "headingPath")
-        headingCone.path = path.cgPath
-        headingCone.fillColor = UIColor.systemBlue.withAlphaComponent(0.24).cgColor
+        headingConeMask.add(animation, forKey: "headingPath")
+        headingConeMask.path = path.cgPath
+        headingConeMask.fillColor = UIColor.white.cgColor
     }
 }
