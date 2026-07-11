@@ -94,9 +94,8 @@ struct TripDashboardView: View {
             RouteMapView(
                 points: routePoints,
                 currentCoordinate: session.location.latestLocation?.coordinate,
-                userHeadingDegrees: session.location.headingDegrees,
+                tracksUserLocation: true,
                 matchedCoordinate: session.routeMatch?.matchedCoordinate,
-                horizontalAccuracyMeters: session.location.latestLocation?.horizontalAccuracy,
                 matchConfidence: session.routeMatch?.confidence,
                 isOffRoute: session.routeMatch?.isOffRoute ?? false,
                 cameraMode: cameraMode,
@@ -341,7 +340,7 @@ struct TripDashboardView: View {
                         smallStat("mountain.2", "剩余爬升 \(Int(match.remainingAscentMeters.rounded())) m")
                     }
                     smallStat("antenna.radiowaves.left.and.right", gpsText,
-                              tint: session.location.isMonitoring ? WDColor.bamboo : WDColor.amber)
+                              tint: gpsTint)
                     Spacer()
                 }
                 if session.routeMatch?.isOffRoute == true {
@@ -369,6 +368,7 @@ struct TripDashboardView: View {
                     .font(WDFont.body(13).weight(.medium)).foregroundStyle(WDColor.ricePaper)
                 Text("到达起点后自动开始计时与记录")
                     .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                smallStat("antenna.radiowaves.left.and.right", gpsText, tint: gpsTint)
             }
             Spacer()
         }
@@ -376,19 +376,15 @@ struct TripDashboardView: View {
 
     private var waitingStats: some View {
         HStack(spacing: 12) {
-            if session.location.accuracyAuthorization == .reducedAccuracy {
+            if session.location.accuracyAuthorization == .reducedAccuracy || isLocationCalibrating {
                 Image(systemName: "location.slash.fill").foregroundStyle(WDColor.amber)
             } else {
                 ProgressView().tint(WDColor.bamboo)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.location.accuracyAuthorization == .reducedAccuracy
-                     ? "请在系统设置中开启精确位置"
-                     : "等待第一个可用 GPS 定位")
+                Text(waitingLocationTitle)
                     .font(WDFont.body(14).weight(.medium)).foregroundStyle(WDColor.ricePaper)
-                Text(session.location.accuracyAuthorization == .reducedAccuracy
-                     ? "关闭精确位置会明显降低路线匹配与偏航判断精度"
-                     : "路线已在本地准备;定位后开始引导")
+                Text(waitingLocationDetail)
                     .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
             }
             Spacer()
@@ -439,12 +435,51 @@ struct TripDashboardView: View {
 
     private var gpsText: String {
         guard session.location.isMonitoring else { return "GPS 未连接" }
+        guard let sample = session.location.latestRawLocation else { return "GPS 搜索中" }
+        let age = Date().timeIntervalSince(sample.timestamp)
+        guard age <= 15 else { return "GPS 数据已过期" }
+        let accuracy = Int(sample.horizontalAccuracy.rounded())
+        guard accuracy <= 100 else { return "GPS 校准中 · ±\(accuracy)m" }
         switch session.routeMatch?.confidence {
-        case .some(.high): return "GPS · 高置信"
-        case .some(.medium): return "GPS · 中置信"
-        case .some(.low): return "GPS · 低置信"
-        case .some(.none), nil: return "GPS 已连接"
+        case .some(.high): return "GPS ±\(accuracy)m · 高置信"
+        case .some(.medium): return "GPS ±\(accuracy)m · 中置信"
+        case .some(.low): return "GPS ±\(accuracy)m · 低置信"
+        case .some(.none), nil: return "GPS ±\(accuracy)m"
         }
+    }
+
+    private var gpsTint: Color {
+        guard session.location.isMonitoring,
+              let sample = session.location.latestRawLocation,
+              Date().timeIntervalSince(sample.timestamp) <= 15,
+              sample.horizontalAccuracy <= 100 else { return WDColor.amber }
+        return WDColor.bamboo
+    }
+
+    private var isLocationCalibrating: Bool {
+        guard let sample = session.location.latestRawLocation else { return false }
+        return sample.horizontalAccuracy > 100
+    }
+
+    private var waitingLocationTitle: String {
+        if session.location.accuracyAuthorization == .reducedAccuracy {
+            return "请在系统设置中开启精确位置"
+        }
+        if let sample = session.location.latestRawLocation,
+           sample.horizontalAccuracy > 100 {
+            return "定位精度不足 · ±\(Int(sample.horizontalAccuracy.rounded()))m"
+        }
+        return "等待第一个可靠 GPS 定位"
+    }
+
+    private var waitingLocationDetail: String {
+        if session.location.accuracyAuthorization == .reducedAccuracy {
+            return "关闭精确位置会明显降低路线匹配与偏航判断精度"
+        }
+        if isLocationCalibrating {
+            return "请到开阔位置停留片刻；达到 100m 内才开始路线判断"
+        }
+        return "路线已在本地准备；定位后开始引导"
     }
 
     private func distanceText(_ meters: Double) -> String {
