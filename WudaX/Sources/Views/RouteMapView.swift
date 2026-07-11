@@ -1,14 +1,24 @@
 import SwiftUI
 import MapKit
 
+/// 地图相机只有在用户明确点击聚焦按钮时移动；`.automatic` 保持行中仪表盘的原有跟随行为。
+enum RouteMapCameraMode: Equatable {
+    case automatic
+    case route
+    case user
+}
+
 /// 本地 GPX 轨迹叠加层。底图是否可用由系统缓存决定，不能把在线瓦片假装成离线资源。
 struct RouteMapView: UIViewRepresentable {
     let points: [GPXTrackPoint]
     var currentCoordinate: CLLocationCoordinate2D?
+    var userHeadingDegrees: CLLocationDirection?
     var matchedCoordinate: RouteCoordinate?
     var horizontalAccuracyMeters: Double?
     var matchConfidence: RouteMatchConfidence?
     var isOffRoute = false
+    var cameraMode: RouteMapCameraMode = .automatic
+    var cameraRequestID = 0
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -16,25 +26,27 @@ struct RouteMapView: UIViewRepresentable {
         let map = MKMapView(frame: .zero)
         map.delegate = context.coordinator
         map.mapType = .standard
-        map.showsUserLocation = true
+        map.showsUserLocation = false
         map.showsCompass = false
         map.showsScale = false
         map.isRotateEnabled = false
         map.pointOfInterestFilter = .excludingAll
-        update(map, fitRoute: true)
+        update(map, context: context, fitRoute: true)
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.isOffRoute = isOffRoute
-        update(map, fitRoute: map.overlays.isEmpty)
+        update(map, context: context, fitRoute: map.overlays.isEmpty)
     }
 
-    private func update(_ map: MKMapView, fitRoute: Bool) {
+    private func update(_ map: MKMapView, context: Context, fitRoute: Bool) {
         let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
         guard coordinates.count >= 2 else { return }
+
         map.removeOverlays(map.overlays)
-        map.removeAnnotations(map.annotations.filter { !($0 is MKUserLocation) })
+        map.removeAnnotations(map.annotations)
+
         let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
         map.addOverlay(polyline)
         if let currentCoordinate,
@@ -53,16 +65,60 @@ struct RouteMapView: UIViewRepresentable {
             ))
         }
         if let currentCoordinate {
-            map.setCenter(currentCoordinate, animated: true)
-        } else if fitRoute {
-            map.setVisibleMapRect(polyline.boundingMapRect,
-                                  edgePadding: UIEdgeInsets(top: 28, left: 28, bottom: 28, right: 28),
-                                  animated: false)
+            map.addAnnotation(UserNavigationAnnotation(
+                coordinate: currentCoordinate,
+                headingDegrees: userHeadingDegrees
+            ))
         }
+
+        updateCamera(map, polyline: polyline, coordinator: context.coordinator, fitRoute: fitRoute)
+    }
+
+    private func updateCamera(_ map: MKMapView,
+                              polyline: MKPolyline,
+                              coordinator: Coordinator,
+                              fitRoute: Bool) {
+        switch cameraMode {
+        case .automatic:
+            if let currentCoordinate {
+                map.setCenter(currentCoordinate, animated: true)
+            } else if fitRoute {
+                fit(polyline, on: map, animated: false)
+            }
+
+        case .route:
+            let needsFocus = fitRoute || coordinator.lastCameraMode != cameraMode
+                || coordinator.lastCameraRequestID != cameraRequestID
+            guard needsFocus else { return }
+            fit(polyline, on: map, animated: !fitRoute)
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
+
+        case .user:
+            let needsFocus = coordinator.lastCameraMode != cameraMode
+                || coordinator.lastCameraRequestID != cameraRequestID
+            guard needsFocus, let currentCoordinate else { return }
+            map.setRegion(
+                MKCoordinateRegion(center: currentCoordinate,
+                                   latitudinalMeters: 1_200,
+                                   longitudinalMeters: 1_200),
+                animated: true
+            )
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
+        }
+    }
+
+    private func fit(_ polyline: MKPolyline, on map: MKMapView, animated: Bool) {
+        map.setVisibleMapRect(polyline.boundingMapRect,
+                              edgePadding: UIEdgeInsets(top: 130, left: 34, bottom: 230, right: 34),
+                              animated: animated)
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var isOffRoute = false
+        var lastCameraMode: RouteMapCameraMode?
+        var lastCameraRequestID: Int?
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polyline = overlay as? MKPolyline {
@@ -83,6 +139,20 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let annotation = annotation as? UserNavigationAnnotation {
+                let identifier = "user-navigation-position"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKAnnotationView)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                let configuration = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+                view.image = UIImage(systemName: "location.north.fill", withConfiguration: configuration)?
+                    .withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
+                let heading = annotation.headingDegrees ?? 0
+                view.transform = CGAffineTransform(rotationAngle: CGFloat(heading * .pi / 180))
+                return view
+            }
+
             guard let annotation = annotation as? MatchedRouteAnnotation else { return nil }
             let identifier = "matched-route-position"
             let marker = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
@@ -109,5 +179,15 @@ private final class MatchedRouteAnnotation: NSObject, MKAnnotation {
         self.coordinate = coordinate
         self.confidence = confidence
         self.isOffRoute = isOffRoute
+    }
+}
+
+private final class UserNavigationAnnotation: NSObject, MKAnnotation {
+    dynamic var coordinate: CLLocationCoordinate2D
+    let headingDegrees: CLLocationDirection?
+
+    init(coordinate: CLLocationCoordinate2D, headingDegrees: CLLocationDirection?) {
+        self.coordinate = coordinate
+        self.headingDegrees = headingDegrees
     }
 }

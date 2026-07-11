@@ -5,6 +5,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var session: TripSession
     @EnvironmentObject var library: RouteLibraryStore
+    @EnvironmentObject var navigation: AppNavigation
     @State private var showChat = false
     @State private var showAllRoutes = false
     @State private var detailRecord: RouteRecord?
@@ -123,8 +124,12 @@ struct HomeView: View {
                 emptyHistory
             } else {
                 ForEach(recentRecords) { record in
-                    Button { detailRecord = record } label: { RouteRecordCard(record: record) }
-                        .buttonStyle(.plain)
+                    RouteRecordCard(record: record) {
+                        navigation.showRouteOnMap(record)
+                        Haptics.tap()
+                    }
+                        .contentShape(Rectangle())
+                        .onTapGesture { detailRecord = record }
                         .contextMenu {
                             Button { detailRecord = record } label: { Label("查看详情", systemImage: "eye") }
                             Button { renaming = record; newName = record.name } label: { Label("重命名", systemImage: "pencil") }

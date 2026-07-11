@@ -4,12 +4,14 @@ import SwiftUI
 struct WudaXApp: App {
     @StateObject private var session = TripSession()
     @StateObject private var library = RouteLibraryStore()
+    @StateObject private var navigation = AppNavigation()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
                 .environmentObject(library)
+                .environmentObject(navigation)
                 .preferredColorScheme(.light)
                 .onAppear { session.library = library }
         }
