@@ -75,7 +75,7 @@ struct BudgetCardView: View {
                     }
                     Spacer(minLength: 8)
                     PillButton(
-                        title: gateReady ? "接受风险并出发" : "先完成装备与权限确认",
+                        title: gateReady ? "接受风险并出发" : "先确认补给与装备清单",
                         color: gateReady ? WDColor.ink : WDColor.mossSurface,
                         textColor: gateReady ? WDColor.onDark : WDColor.mist
                     ) {
@@ -268,7 +268,26 @@ struct BudgetCardView: View {
                         .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 8)
+                .padding(.bottom, 10)
+
+                Button {
+                    confirmAllEquipment()
+                } label: {
+                    Label(allEquipmentDone ? "已全部确认" : "一键确认全部清单",
+                          systemImage: allEquipmentDone ? "checkmark.circle.fill" : "checklist.checked")
+                        .font(WDFont.body(13).weight(.semibold))
+                        .foregroundStyle(allEquipmentDone ? WDColor.bamboo : WDColor.ricePaper)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(allEquipmentDone ? WDColor.bamboo.opacity(0.12) : WDColor.mossSurface)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(checks.isEmpty || allEquipmentDone)
+                .padding(.bottom, 6)
+
                 ForEach($checks) { $item in
                     Toggle(isOn: $item.done.animation(.spring(duration: 0.3))) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -289,6 +308,19 @@ struct BudgetCardView: View {
                 }
             }
         }
+    }
+
+    private var allEquipmentDone: Bool {
+        !checks.isEmpty && checks.allSatisfy(\.done)
+    }
+
+    private func confirmAllEquipment() {
+        withAnimation(.spring(duration: 0.3)) {
+            for index in checks.indices {
+                checks[index].done = true
+            }
+        }
+        Haptics.tap()
     }
 
     private var permissionCard: some View {

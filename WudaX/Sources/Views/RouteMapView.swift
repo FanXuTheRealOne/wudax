@@ -67,6 +67,8 @@ struct RouteMapView: UIViewRepresentable {
         map.showsCompass = false
         map.showsScale = false
         map.isRotateEnabled = false
+        map.isScrollEnabled = true
+        map.isZoomEnabled = true
         map.pointOfInterestFilter = .excludingAll
         context.coordinator.isOffRoute = isOffRoute
         update(map, context: context, fitRoute: true)
@@ -87,12 +89,11 @@ struct RouteMapView: UIViewRepresentable {
         guard coordinates.count >= 2 else { return }
 
         let polyline = syncRoute(map, coordinates: coordinates, coordinator: context.coordinator)
-        let guidePolyline = syncGuideLine(map, coordinates: coordinates, coordinator: context.coordinator)
+        _ = syncGuideLine(map, coordinates: coordinates, coordinator: context.coordinator)
         syncAccuracyCircle(map, coordinator: context.coordinator)
         syncMatchedAnnotation(map, coordinator: context.coordinator)
         syncUserAnnotation(map, coordinator: context.coordinator)
-        updateCamera(map, polyline: polyline, guidePolyline: guidePolyline,
-                     coordinator: context.coordinator, fitRoute: fitRoute)
+        updateCamera(map, polyline: polyline, coordinator: context.coordinator, fitRoute: fitRoute)
     }
 
     /// 只有路线本身变化时才重建折线与起终点，heading 高频更新不会让整张地图闪烁。
@@ -220,26 +221,39 @@ struct RouteMapView: UIViewRepresentable {
 
     private func updateCamera(_ map: MKMapView,
                               polyline: MKPolyline,
-                              guidePolyline: GuidePolyline?,
                               coordinator: Coordinator,
                               fitRoute: Bool) {
         switch cameraMode {
         case .automatic:
-            if let currentCoordinate {
-                if let guidePolyline {
-                    // 前往起点阶段:始终保持自己与起点旗标(虚线两端)同屏。
-                    map.setRegion(paddedRegion(for: guidePolyline.boundingMapRect, scale: 1.8,
-                                               minDelta: 0.008),
-                                  animated: coordinator.hasSetUserRegion)
+            let explicitFocusRequest = coordinator.lastCameraMode != cameraMode
+                || coordinator.lastCameraRequestID != cameraRequestID
+            if explicitFocusRequest {
+                coordinator.isFollowSuspendedByGesture = false
+                if currentCoordinate == nil { coordinator.hasSetUserRegion = false }
+            }
+
+            if let currentCoordinate,
+               CLLocationCoordinate2DIsValid(currentCoordinate) {
+                let previousLocation = coordinator.lastFollowCoordinate.map {
+                    CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+                }
+                let currentLocation = CLLocation(latitude: currentCoordinate.latitude,
+                                                 longitude: currentCoordinate.longitude)
+                let movedEnough = previousLocation.map { currentLocation.distance(from: $0) >= 8 } ?? true
+
+                if explicitFocusRequest || !coordinator.hasSetUserRegion {
+                    map.setRegion(
+                        MKCoordinateRegion(center: currentCoordinate,
+                                           latitudinalMeters: 1_500,
+                                           longitudinalMeters: 1_500),
+                        animated: coordinator.hasSetInitialRegion
+                    )
                     coordinator.hasSetUserRegion = true
-                } else if coordinator.hasSetUserRegion {
-                    map.setCenter(currentCoordinate, animated: true)
-                } else {
-                    map.setRegion(MKCoordinateRegion(center: currentCoordinate,
-                                                     latitudinalMeters: 1_500,
-                                                     longitudinalMeters: 1_500),
-                                  animated: false)
-                    coordinator.hasSetUserRegion = true
+                    coordinator.lastFollowCoordinate = currentCoordinate
+                } else if !coordinator.isFollowSuspendedByGesture && movedEnough {
+                    // 仅在 GPS 位置真正移动时更新中心，罗盘高频刷新不会再触发地图动画。
+                    map.setCenter(currentCoordinate, animated: false)
+                    coordinator.lastFollowCoordinate = currentCoordinate
                 }
             } else if !coordinator.hasSetInitialRegion {
                 // 尚无定位:先展示整条路线。setRegion 在布局完成前调用也能正确生效,
@@ -247,6 +261,8 @@ struct RouteMapView: UIViewRepresentable {
                 map.setRegion(paddedRegion(for: polyline.boundingMapRect, scale: 1.25), animated: false)
             }
             coordinator.hasSetInitialRegion = true
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
 
         case .route:
             let needsFocus = fitRoute || coordinator.lastCameraMode != cameraMode
@@ -260,7 +276,15 @@ struct RouteMapView: UIViewRepresentable {
         case .user:
             let needsFocus = coordinator.lastCameraMode != cameraMode
                 || coordinator.lastCameraRequestID != cameraRequestID
-            guard needsFocus, let currentCoordinate else { return }
+                || !coordinator.hasSetUserRegion
+            guard needsFocus else { return }
+            coordinator.lastCameraMode = cameraMode
+            coordinator.lastCameraRequestID = cameraRequestID
+            guard let currentCoordinate,
+                  CLLocationCoordinate2DIsValid(currentCoordinate) else {
+                coordinator.hasSetUserRegion = false
+                return
+            }
             map.setRegion(
                 MKCoordinateRegion(center: currentCoordinate,
                                    latitudinalMeters: 1_200,
@@ -269,8 +293,6 @@ struct RouteMapView: UIViewRepresentable {
             )
             coordinator.hasSetInitialRegion = true
             coordinator.hasSetUserRegion = true
-            coordinator.lastCameraMode = cameraMode
-            coordinator.lastCameraRequestID = cameraRequestID
         }
     }
 
@@ -294,6 +316,8 @@ struct RouteMapView: UIViewRepresentable {
         var lastCameraRequestID: Int?
         var hasSetInitialRegion = false
         var hasSetUserRegion = false
+        var isFollowSuspendedByGesture = false
+        var lastFollowCoordinate: CLLocationCoordinate2D?
         fileprivate var routeKey: RouteMapRouteKey?
         fileprivate var polyline: MKPolyline?
         fileprivate var guideKey: MapGuideKey?
@@ -304,6 +328,21 @@ struct RouteMapView: UIViewRepresentable {
         fileprivate var endAnnotation: RouteEndpointAnnotation?
         fileprivate var matchedAnnotation: MatchedRouteAnnotation?
         fileprivate var userAnnotation: UserNavigationAnnotation?
+
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            guard lastCameraMode == .automatic,
+                  containsActiveGesture(in: mapView) else { return }
+            isFollowSuspendedByGesture = true
+        }
+
+        private func containsActiveGesture(in view: UIView) -> Bool {
+            if (view.gestureRecognizers ?? []).contains(where: {
+                $0.state == .began || $0.state == .changed
+            }) {
+                return true
+            }
+            return view.subviews.contains { containsActiveGesture(in: $0) }
+        }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let guide = overlay as? GuidePolyline {
