@@ -76,14 +76,18 @@ struct HomeView: View {
 
     private var header: some View {
         HStack {
-            if let logo = UIImage(named: "logo_white") {
-                Image(uiImage: logo).resizable().scaledToFit().frame(height: 26)
-            } else {
-                Text("wudaX").font(WDFont.title(24)).foregroundStyle(WDColor.ricePaper)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text("wuda")
+                    .font(WDFont.title(24))
+                    .italic()
+                    .foregroundStyle(WDColor.ink)
+                Text("X")
+                    .font(WDFont.title(27))
+                    .foregroundStyle(WDColor.amber)
             }
             Spacer()
             Image(systemName: "person.circle")
-                .font(.system(size: 24, weight: .light)).foregroundStyle(WDColor.ricePaper.opacity(0.8))
+                .font(.system(size: 24, weight: .light)).foregroundStyle(WDColor.ink.opacity(0.78))
         }
         .padding(.top, 6)
     }
@@ -93,7 +97,7 @@ struct HomeView: View {
     private var startPlanningRow: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("行 程").font(WDFont.title(34)).foregroundStyle(WDColor.onDark)
+                Text("行 程").font(WDFont.title(34)).foregroundStyle(WDColor.ricePaper)
                 Rectangle().fill(WDColor.amber).frame(width: 44, height: 2.5)
             }
             Spacer()

@@ -24,7 +24,7 @@ struct ReviewView: View {
 
     private var duskHeader: some View {
         Group {
-            if let ui = UIImage(named: "ink_mountains_dusk") {
+            if let ui = UIImage(named: "hero_dusk") ?? UIImage(named: "ink_mountains_dusk") {
                 Image(uiImage: ui)
                     .resizable().scaledToFill()
                     .frame(height: 260).frame(maxWidth: .infinity).clipped()
