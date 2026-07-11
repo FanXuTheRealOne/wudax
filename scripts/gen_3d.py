@@ -3,7 +3,9 @@
 import base64, json, os, sys, time
 import requests
 
-API_KEY = "REMOVED-LEAKED-MESHY-KEY"
+API_KEY = os.environ.get("MESHY_API_KEY")
+if not API_KEY:
+    raise SystemExit("Missing MESHY_API_KEY. Set it in your shell or local .env; never commit API keys.")
 BASE = "https://api.meshy.ai/openapi/v1/image-to-3d"
 H = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 ROOT = os.path.join(os.path.dirname(__file__), "..")

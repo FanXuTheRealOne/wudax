@@ -5,7 +5,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
 API_BASE = "https://api.tokenrouter.com/v1"
-API_KEY = "REMOVED-LEAKED-IMAGE-KEY"
+API_KEY = os.environ.get("TOKENROUTER_API_KEY")
+if not API_KEY:
+    raise SystemExit("Missing TOKENROUTER_API_KEY. Set it in your shell or local .env; never commit API keys.")
 MODEL = "openai/gpt-5.4-image-2"
 OUT = os.path.join(os.path.dirname(__file__), "..", "design")
 
