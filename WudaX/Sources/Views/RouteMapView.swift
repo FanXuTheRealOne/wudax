@@ -405,10 +405,80 @@ private struct MapGuideKey: Equatable {
          currentCoordinate: CLLocationCoordinate2D?,
          startCoordinate: CLLocationCoordinate2D?) {
         self.enabled = enabled
-        currentLatitude = currentCoordinate?.latitude
-        currentLongitude = currentCoordinate?.longitude
-        startLatitude = startCoordinate?.latitude
-        startLongitude = startCoordinate?.longitude
+        // 端点坐标量化到约 30 m 网格：虚线是公里级起点引导，
+        // GPS 逐秒漂移几米不值得删除重建 overlay，会打断缩放手势渲染。
+        currentLatitude = Self.quantized(currentCoordinate?.latitude)
+        currentLongitude = Self.quantized(currentCoordinate?.longitude)
+        startLatitude = Self.quantized(startCoordinate?.latitude)
+        startLongitude = Self.quantized(startCoordinate?.longitude)
+    }
+
+    private static func quantized(_ degrees: CLLocationDegrees?) -> CLLocationDegrees? {
+        degrees.map { ($0 / 0.0003).rounded() * 0.0003 }
+    }
+}
+
+enum LocationFocusCycle {
+    static func next(after mode: RouteMapCameraMode) -> RouteMapCameraMode {
+        switch mode {
+        case .route, .user:
+            return .automatic
+        case .automatic:
+            return .user
+        }
+    }
+}
+
+// MARK: - 地图相机控制按钮组(行中页与主地图页共用)
+// 「路线聚焦」+「定位循环」:定位按钮第一次点进入自动态，
+// 再点切换为跟随定位；相机动画由 RouteMapView.updateCamera 统一执行。
+struct MapCameraControls: View {
+    @Binding var cameraMode: RouteMapCameraMode
+    @Binding var cameraRequestID: Int
+    /// 点定位按钮时的附加动作(主地图页用来启动定位监听)。
+    var onLocateTapped: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 8) {
+            MapControlButton(icon: "arrow.up.left.and.arrow.down.right",
+                             selected: cameraMode == .route) {
+                cameraMode = .route
+                cameraRequestID += 1
+                Haptics.tap()
+            }
+            .accessibilityLabel("路线聚焦")
+
+            MapControlButton(icon: "location.fill",
+                             selected: cameraMode != .route) {
+                onLocateTapped?()
+                cameraMode = LocationFocusCycle.next(after: cameraMode)
+                cameraRequestID += 1
+                Haptics.tap()
+            }
+            .accessibilityLabel("定位:概览与跟随循环切换")
+        }
+    }
+}
+
+/// 圆形地图控制按钮(与行中页原样式一致)。
+struct MapControlButton: View {
+    let icon: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(selected ? WDColor.onDark : WDColor.ricePaper)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle().fill(selected ? WDColor.ink : WDColor.deepMoss.opacity(0.96))
+                        .overlay(Circle().stroke(WDColor.line.opacity(selected ? 0 : 0.8), lineWidth: 1))
+                        .shadow(color: WDColor.ink.opacity(0.12), radius: 8, y: 4)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

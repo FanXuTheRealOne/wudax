@@ -65,6 +65,57 @@ WUDAX 将 GPX 路线、个人体能、HealthKit、主观疲劳和实时位置放
 
 仓库同时提供一套可在 Windows 上评审的浏览器原型：默认展示新版“清新山野”方案，并可通过 URL 参数切换到旧版“深绿水墨”方案。浏览器原型用于设计和流程评审，不替代 SwiftUI 真机验证。
 
+### 交互式 3D 模型
+
+WUDAX 的膝关节外骨骼模型保存在仓库内：
+
+- `assets/3d/exoskeleton.glb`
+- `assets/3d/exoskeleton.usdz`
+- App 打包资源：`WudaX/Sources/Resources/exoskeleton.usdz`
+
+交互页面：[exoskeleton-viewer.html](exoskeleton-viewer.html)
+
+GitHub README 不能直接执行自定义 3D JavaScript，因此没有在这里放不可交互的死图。需要查看可旋转、可缩放的模型时，在仓库根目录启动一个本地静态服务：
+
+```bash
+python3 -m http.server 8080
+```
+
+然后打开：
+
+```text
+http://localhost:8080/exoskeleton-viewer.html
+```
+
+如果之后启用 GitHub Pages，同一个页面也可以作为在线交互式查看器使用。
+
+### Landing page
+
+仓库内还有一个与 WUDAX 当前 UI 视觉一致的静态 landing page，包含产品视频、真实界面配图和可旋转 3D 模型：
+
+```bash
+python3 -m http.server 8080
+```
+
+打开：
+
+```text
+http://localhost:8080/landing/
+```
+
+页面文件：
+
+- `landing/index.html`
+- `landing/styles.css`
+- `assets/video/wudax-launch.mp4`
+- `assets/3d/exoskeleton.glb`
+
+视频脚本、分镜和逐镜头图片提示词放在 `landing/video/`，后续可以按分镜逐张生成高质量画面，再用剪辑脚本替换当前仓库里的静态串联预览视频。
+
+竖屏小红书 B-roll 预览：
+
+- `assets/video/wudax-broll-vertical.mp4`
+
 ## 核心能力
 
 ### 完全本地的路线理解

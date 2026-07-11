@@ -10,9 +10,14 @@ struct SessionAgentView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var input = ""
+    @State private var voiceRevision = 0
     @FocusState private var inputFocused: Bool
 
     private var context: AgentSessionContext? { agent.activeContext }
+    private var voiceStatus: AgentVoiceRuntimeStatus {
+        let _ = voiceRevision
+        return agent.voice.status
+    }
 
     private static let quickQuestions = [
         "前面路怎么样?",
@@ -29,10 +34,14 @@ struct SessionAgentView: View {
                 llmStatusRow
                 messageList
                 quickChips
+                voiceControlStrip
                 inputBar
             }
         }
         .onAppear { agent.markRead() }
+        .onReceive(agent.voice.objectWillChange) { _ in
+            voiceRevision &+= 1
+        }
     }
 
     // MARK: 顶部
@@ -201,6 +210,81 @@ struct SessionAgentView: View {
             .padding(.horizontal, 20)
         }
         .padding(.vertical, 8)
+    }
+
+    private var voiceControlStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.tap()
+                    if agent.voice.isListening {
+                        agent.stopVoiceQuestion()
+                    } else {
+                        if !agent.voicePreferences.voiceInputEnabled {
+                            agent.toggleVoiceInput()
+                        }
+                        agent.startVoiceQuestion()
+                    }
+                } label: {
+                    Image(systemName: agent.voice.isListening ? "stop.circle.fill" : "mic.circle.fill")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(agent.voice.isListening ? WDColor.cinnabar : WDColor.ink)
+                        .accessibilityLabel(agent.voice.isListening ? "停止语音输入" : "开始语音输入")
+                }
+                .buttonStyle(.plain)
+                .disabled(agent.isResponding)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(voiceStatus.displayText)
+                        .font(WDFont.caption(12).weight(.medium))
+                        .foregroundStyle(WDColor.ricePaper)
+                        .lineLimit(1)
+                    Text("本地语音输入接入当前行程 Agent")
+                        .font(WDFont.caption(10))
+                        .foregroundStyle(WDColor.mist)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                voiceToggle(icon: "speaker.wave.2.fill",
+                            isOn: agent.voicePreferences.spokenRepliesEnabled,
+                            label: "播报回复") {
+                    agent.toggleSpokenReplies()
+                }
+
+                voiceToggle(icon: "bell.and.waves.left.and.right.fill",
+                            isOn: agent.voicePreferences.proactiveSpeechEnabled,
+                            label: "主动播报") {
+                    agent.toggleProactiveSpeech()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(WDColor.deepMoss)
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(WDColor.line, lineWidth: 1))
+        )
+        .padding(.horizontal, 20)
+        .padding(.bottom, 4)
+    }
+
+    private func voiceToggle(icon: String, isOn: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            Haptics.tap()
+            action()
+        }) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isOn ? WDColor.onDark : WDColor.mist)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(isOn ? WDColor.ink : WDColor.mossSurface))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityValue(isOn ? "已开启" : "已关闭")
     }
 
     private var inputBar: some View {

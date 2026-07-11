@@ -16,6 +16,8 @@ __pycache__/
 dist/
 node_modules/
 .env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -33,3 +35,6 @@ Thumbs.db
 
 # 打包用大模型(用 scripts/fetch_model.py 复现,勿入库)
 WudaX/BundledModel
+
+# Rodin / Hyper3D API responses may include subscription metadata.
+assets/3d/bang/*.json

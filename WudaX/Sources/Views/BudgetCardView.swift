@@ -43,6 +43,8 @@ struct BudgetCardView: View {
     private var route: Route { session.plan.route }
 
     private var allRequiredDone: Bool { checks.filter(\.required).allSatisfy(\.done) }
+    private var completedCheckCount: Int { checks.filter(\.done).count }
+    private var allChecksDone: Bool { !checks.isEmpty && checks.allSatisfy(\.done) }
     private var locationReady: Bool {
         session.location.authorizationState == .whenInUse || session.location.authorizationState == .always
     }
@@ -110,6 +112,13 @@ struct BudgetCardView: View {
     private func rebuildChecks() {
         checks = session.plan.equipment.map {
             GateItem(title: $0.title, reason: $0.reason, required: $0.required)
+        }
+    }
+
+    private func confirmAllChecks() {
+        Haptics.tap()
+        withAnimation(.spring(duration: 0.28)) {
+            checks.markAllDone()
         }
     }
 
@@ -261,33 +270,48 @@ struct BudgetCardView: View {
     private var equipmentChecklist: some View {
         InkCard {
             VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("补给与装备清单", systemImage: "backpack")
-                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                    Text("出发之前，逐项确认背包里真实带了这些。")
-                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("补给与装备清单", systemImage: "backpack")
+                            .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                        Text("出发之前，确认背包里真实带了这些。")
+                            .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                    }
+                    Spacer(minLength: 8)
+                    Button {
+                        confirmAllChecks()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: allChecksDone ? "checkmark.seal.fill" : "checkmark.circle")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(allChecksDone ? "已确认" : "一键确认")
+                                .font(WDFont.caption(11).weight(.semibold))
+                        }
+                        .foregroundStyle(allChecksDone ? WDColor.bamboo : WDColor.ink)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 11)
+                                .fill(allChecksDone ? WDColor.mossSurface : WDColor.mossSurface.opacity(0.72))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11)
+                                .stroke(allChecksDone ? WDColor.bamboo.opacity(0.26) : WDColor.line, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(allChecksDone)
+                    .accessibilityLabel(allChecksDone ? "补给与装备清单已全部确认" : "一键确认补给与装备清单")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 10)
-
-                Button {
-                    confirmAllEquipment()
-                } label: {
-                    Label(allEquipmentDone ? "已全部确认" : "一键确认全部清单",
-                          systemImage: allEquipmentDone ? "checkmark.circle.fill" : "checklist.checked")
-                        .font(WDFont.body(13).weight(.semibold))
-                        .foregroundStyle(allEquipmentDone ? WDColor.bamboo : WDColor.ricePaper)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(allEquipmentDone ? WDColor.bamboo.opacity(0.12) : WDColor.mossSurface)
-                        )
+                .padding(.bottom, 8)
+                if !checks.isEmpty {
+                    Text("\(completedCheckCount)/\(checks.count) 项已确认")
+                        .font(WDFont.caption(10))
+                        .foregroundStyle(WDColor.mist)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 2)
                 }
-                .buttonStyle(.plain)
-                .disabled(checks.isEmpty || allEquipmentDone)
-                .padding(.bottom, 6)
-
                 ForEach($checks) { $item in
                     Toggle(isOn: $item.done.animation(.spring(duration: 0.3))) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -308,19 +332,6 @@ struct BudgetCardView: View {
                 }
             }
         }
-    }
-
-    private var allEquipmentDone: Bool {
-        !checks.isEmpty && checks.allSatisfy(\.done)
-    }
-
-    private func confirmAllEquipment() {
-        withAnimation(.spring(duration: 0.3)) {
-            for index in checks.indices {
-                checks[index].done = true
-            }
-        }
-        Haptics.tap()
     }
 
     private var permissionCard: some View {
@@ -378,5 +389,13 @@ struct BudgetCardView: View {
 
     private func fmt(_ v: Double, _ unit: String) -> String {
         (v >= 100 ? "\(Int(v))" : String(format: "%.1f", v)) + " " + unit
+    }
+}
+
+extension Array where Element == BudgetCardView.GateItem {
+    mutating func markAllDone() {
+        for index in indices {
+            self[index].done = true
+        }
     }
 }

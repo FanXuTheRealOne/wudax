@@ -162,9 +162,75 @@ final class AgentDataBusTests: XCTestCase {
         XCTAssertTrue(snapshot.contains("【用户画像】"))
     }
 
+    /// 真实出发流程后,快照必须带上「前方路线」等行中数据 ——
+    /// 这是 AI 窗口能回答「前面路怎么样」的数据前提。
+    @MainActor
+    func testFullSnapshotExposesLookaheadAfterRealDepart() throws {
+        let session = TripSession()
+        let record = try XCTUnwrap(RouteLibrarySeed.records.first)
+        session.planning.loadForPlanning(record)
+        session.plan.route = Route(analyzedGPX: record.analyzed())
+        session.depart()
+
+        XCTAssertEqual(session.trackingState, .recording)
+        XCTAssertNotNil(session.preparedRoute)
+
+        let snapshot = AgentDataBus.fullSnapshot(session: session)
+        XCTAssertTrue(snapshot.contains("【前方路线】"), "缺少前方路线节:\n\(snapshot)")
+        XCTAssertTrue(snapshot.contains("【风险点】"))
+        XCTAssertTrue(snapshot.contains("【轨迹来源】"))
+        XCTAssertTrue(snapshot.contains("已记录"))
+
+        let lookahead = try XCTUnwrap(AgentDataBus.lookahead(session: session))
+        XCTAssertFalse(lookahead.segmentSummaries.isEmpty)
+    }
+
     func testStripThinkingRemovesClosedAndOrphanBlocks() {
         XCTAssertEqual(LocalLLMService.stripThinking("<think>推理中</think>注意补水。"), "注意补水。")
         XCTAssertEqual(LocalLLMService.stripThinking("前方长下坡。<think>未闭合"), "前方长下坡。")
         XCTAssertEqual(LocalLLMService.stripThinking("  正常输出  "), "正常输出")
+    }
+
+    func testVoicePreferencesDefaultToTextOnly() {
+        let preferences = AgentVoicePreferences()
+
+        XCTAssertFalse(preferences.voiceInputEnabled)
+        XCTAssertFalse(preferences.spokenRepliesEnabled)
+        XCTAssertFalse(preferences.proactiveSpeechEnabled)
+        XCTAssertFalse(preferences.shouldSpeak(role: .assistant))
+        XCTAssertFalse(preferences.shouldSpeak(role: .proactive))
+    }
+
+    func testVoicePreferencesGateAssistantAndProactiveSpeechSeparately() {
+        var preferences = AgentVoicePreferences()
+        preferences.spokenRepliesEnabled = true
+
+        XCTAssertTrue(preferences.shouldSpeak(role: .assistant))
+        XCTAssertFalse(preferences.shouldSpeak(role: .user))
+        XCTAssertFalse(preferences.shouldSpeak(role: .proactive))
+
+        preferences.proactiveSpeechEnabled = true
+
+        XCTAssertTrue(preferences.shouldSpeak(role: .proactive))
+    }
+
+    func testVoiceStatusCopyExplainsPermissionAndListeningStates() {
+        XCTAssertEqual(AgentVoiceRuntimeStatus.idle.displayText, "语音待命")
+        XCTAssertEqual(AgentVoiceRuntimeStatus.listening.displayText, "正在听你说话")
+        XCTAssertEqual(AgentVoiceRuntimeStatus.permissionDenied.displayText, "麦克风或语音识别权限未开启")
+        XCTAssertEqual(AgentVoiceRuntimeStatus.onDeviceRecognitionUnavailable.displayText, "当前设备不支持离线语音识别")
+    }
+
+    @MainActor
+    func testRecognizedVoiceTextRoutesIntoActiveAgentSession() async {
+        let agent = WudaXAgent(llm: LocalLLMService())
+        let session = TripSession()
+        agent.attach(session)
+        session.depart()
+
+        await agent.handleRecognizedVoiceText("前面路怎么样")
+
+        XCTAssertEqual(agent.activeContext?.messages.first?.role, .user)
+        XCTAssertEqual(agent.activeContext?.messages.first?.text, "前面路怎么样")
     }
 }

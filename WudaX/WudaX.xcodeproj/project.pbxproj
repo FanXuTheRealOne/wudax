@@ -47,6 +47,7 @@
 		7D83611A3608D9D6F329761B /* TripSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB908F9B7419A36EDBC639C4 /* TripSession.swift */; };
 		7FE0F5E90213248F5D122715 /* RouteMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE91D23730C4118DA842172D /* RouteMatchingTests.swift */; };
 		7FF165137347B1B1FB94D7D2 /* logo_white.png in Resources */ = {isa = PBXBuildFile; fileRef = 0A3C8A2A4CE94C3EDA69FE1E /* logo_white.png */; };
+		83686804DFE74BFD58E8655F /* RouteElevationProfilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB60FAD006AA665ECA7247A7 /* RouteElevationProfilerTests.swift */; };
 		8DE8F9382B431226127F4E30 /* GatekeeperReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529A59441EDAD8AF78821A4B /* GatekeeperReadinessTests.swift */; };
 		9632B87E74643C815C26E927 /* GPXParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E063F808A36DB453A0ABB935 /* GPXParser.swift */; };
 		96CDCB49633977B1BC982852 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */; };
@@ -58,6 +59,7 @@
 		A48E58E2ADF63FC841B24422 /* RouteLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505D1494DF5510D86B4CA1E6 /* RouteLibraryStore.swift */; };
 		A7B1265F6FE36BC3B42E61E8 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991B980F5DE0E162ED79E9FA /* ReviewView.swift */; };
 		A8ABC2B1CDA6A597979F7337 /* AgentToolOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60326BAA19C687933ED662A1 /* AgentToolOrchestrator.swift */; };
+		AA914C1A9C934954F35A2F09 /* RouteElevationProfiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6E67F71FF3B9077A9DFBD2 /* RouteElevationProfiler.swift */; };
 		B728D4444838265BD57EFCAC /* OfflineResourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A39D5F51CC812BD58E2C3DDD /* OfflineResourceManager.swift */; };
 		B93C97AFFE4BE856146D580F /* GPXAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9F3A25A8CD2E1EF23D2BCE /* GPXAnalyzer.swift */; };
 		BE9F63D85A9A829DE658B7FB /* HikingRuleToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EDD0FD76EAE8DBD31BB1DEF /* HikingRuleToolsTests.swift */; };
@@ -142,6 +144,7 @@
 		C607B46FA5E9883A9102F0D3 /* TripDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDashboardView.swift; sourceTree = "<group>"; };
 		C791F21F1D6799E629B9F0D8 /* hero_dusk.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = hero_dusk.png; sourceTree = "<group>"; };
 		CAC92CA489E2E57B3E06486E /* WudaXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WudaXApp.swift; sourceTree = "<group>"; };
+		CB60FAD006AA665ECA7247A7 /* RouteElevationProfilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteElevationProfilerTests.swift; sourceTree = "<group>"; };
 		D030A9E2654D9DD4113D3BC4 /* TripTrackRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackRecorder.swift; sourceTree = "<group>"; };
 		D778BB42F93867C5D5749816 /* RouteMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteMapView.swift; sourceTree = "<group>"; };
 		DFD5B62F2FD11D336CD0A665 /* LocalLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMService.swift; sourceTree = "<group>"; };
@@ -155,6 +158,7 @@
 		FBB2CAFB5DEEE4A971D647D9 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		FD6967BB2FCADB1F89872A65 /* WudaX.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WudaX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDA3B802B5ECD7ABFE419DEB /* exoskeleton.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = exoskeleton.usdz; sourceTree = "<group>"; };
+		FE6E67F71FF3B9077A9DFBD2 /* RouteElevationProfiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteElevationProfiler.swift; sourceTree = "<group>"; };
 		FE91D23730C4118DA842172D /* RouteMatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteMatchingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -280,6 +284,7 @@
 			children = (
 				9688B8E6287DDF82E4016734 /* AgentDataBus.swift */,
 				863FBE20F11D9862AC7563DD /* AgentEngine.swift */,
+				FE6E67F71FF3B9077A9DFBD2 /* RouteElevationProfiler.swift */,
 				FB908F9B7419A36EDBC639C4 /* TripSession.swift */,
 				B841B3CD6A3E947073240572 /* WudaXAgent.swift */,
 			);
@@ -368,6 +373,7 @@
 				8834CE3DB757CB28AF99C52A /* GPXParserTests.swift */,
 				3EDD0FD76EAE8DBD31BB1DEF /* HikingRuleToolsTests.swift */,
 				615FD2E85E5AC473B0DDA23F /* PlanningCoordinatorTests.swift */,
+				CB60FAD006AA665ECA7247A7 /* RouteElevationProfilerTests.swift */,
 				FE91D23730C4118DA842172D /* RouteMatchingTests.swift */,
 				C21142AA64056E3C050E4A1F /* TripStoreTests.swift */,
 				765D642CF7D61EFB09E2A38D /* TripTrackRecorderTests.swift */,
@@ -551,6 +557,7 @@
 				A7B1265F6FE36BC3B42E61E8 /* ReviewView.swift in Sources */,
 				2DA6F6C152333390891D6987 /* RootTabView.swift in Sources */,
 				5F155B7493801EE1F14F596B /* RouteDetailView.swift in Sources */,
+				AA914C1A9C934954F35A2F09 /* RouteElevationProfiler.swift in Sources */,
 				2221AF4AEF5FA9E36675BAD4 /* RouteLibrarySeed.swift in Sources */,
 				A48E58E2ADF63FC841B24422 /* RouteLibraryStore.swift in Sources */,
 				0518EE069DC528B2CA876429 /* RouteMapView.swift in Sources */,
@@ -582,6 +589,7 @@
 				8DE8F9382B431226127F4E30 /* GatekeeperReadinessTests.swift in Sources */,
 				BE9F63D85A9A829DE658B7FB /* HikingRuleToolsTests.swift in Sources */,
 				69B5A7E05E9D810742D9A8A1 /* PlanningCoordinatorTests.swift in Sources */,
+				83686804DFE74BFD58E8655F /* RouteElevationProfilerTests.swift in Sources */,
 				7FE0F5E90213248F5D122715 /* RouteMatchingTests.swift in Sources */,
 				C78F00F178031A4ED05E181A /* TripStoreTests.swift in Sources */,
 				E479AA195D3477DDE924DBE3 /* TripTrackRecorderTests.swift in Sources */,
@@ -704,6 +712,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "WUDAX 读取徒步准备相关的健康数据，用于离线疲劳评估。";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "WUDAX 在你主动开始行程后继续记录路线进度和安全事件。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WUDAX 使用定位匹配路线进度并在行中进行安全评估。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WUDAX 使用麦克风把你的语音问题转成当前行程 Agent 的文字输入。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "WUDAX 使用本机语音识别把你的语音问题转成当前行程 Agent 的文字输入。";
 				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "WUDAX 只在风险升级或冷却期结束时提醒你确认状态。";
 				INFOPLIST_KEY_UIBackgroundModes = (
 					location,
@@ -795,6 +805,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "WUDAX 读取徒步准备相关的健康数据，用于离线疲劳评估。";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "WUDAX 在你主动开始行程后继续记录路线进度和安全事件。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WUDAX 使用定位匹配路线进度并在行中进行安全评估。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WUDAX 使用麦克风把你的语音问题转成当前行程 Agent 的文字输入。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "WUDAX 使用本机语音识别把你的语音问题转成当前行程 Agent 的文字输入。";
 				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "WUDAX 只在风险升级或冷却期结束时提醒你确认状态。";
 				INFOPLIST_KEY_UIBackgroundModes = (
 					location,

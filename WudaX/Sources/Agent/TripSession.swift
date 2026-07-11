@@ -25,6 +25,31 @@ struct TripStartGate {
     mutating func reset() { consecutiveFixes = 0 }
 }
 
+/// Effective workout clock that excludes one or more manual pause intervals.
+final class WorkoutElapsedClock {
+    let startDate: Date
+    private(set) var pausedAt: Date?
+    private(set) var accumulatedPausedDuration: TimeInterval = 0
+
+    init(startDate: Date) { self.startDate = startDate }
+
+    func pause(at date: Date) {
+        guard pausedAt == nil else { return }
+        pausedAt = date
+    }
+
+    func resume(at date: Date) {
+        guard let pausedAt else { return }
+        accumulatedPausedDuration += max(0, date.timeIntervalSince(pausedAt))
+        self.pausedAt = nil
+    }
+
+    func elapsedSeconds(at date: Date) -> TimeInterval {
+        let openPause = pausedAt.map { max(0, date.timeIntervalSince($0)) } ?? 0
+        return max(0, date.timeIntervalSince(startDate) - accumulatedPausedDuration - openPause)
+    }
+}
+
 // MARK: - 行程会话：贯穿五阶段的状态机
 
 @MainActor
@@ -71,6 +96,7 @@ final class TripSession: ObservableObject {
     @Published private(set) var trackingState: LiveTrackingState = .waitingGPS
     /// 真正开始记录(到达起点)的时刻;计时与计划偏差以此为基准。
     @Published private(set) var hikeStartDate: Date?
+    @Published private(set) var isWorkoutPaused = false
 
     // 复盘
     @Published var reviewEntries = SampleData.reviewQuestions
@@ -78,6 +104,7 @@ final class TripSession: ObservableObject {
     private var riskTimer: AnyCancellable?
     private var planningCancellable: AnyCancellable?
     private var tripStartDate: Date?
+    private var workoutClock: WorkoutElapsedClock?
     private var currentTripID = UUID()
     private var lastRiskLevel: RiskLevel = .low
     private var lastOffRouteEventAt: Date?
@@ -92,6 +119,14 @@ final class TripSession: ObservableObject {
 
     var routeStartCoordinate: RouteCoordinate? { preparedRoute?.vertices.first?.coordinate }
     var routeEndCoordinate: RouteCoordinate? { preparedRoute?.vertices.last?.coordinate }
+
+    /// 兼容行中 Agent/面板读取：未到起点时返回当前距起点距离。
+    var distanceToStartMeters: Double? {
+        if case .toStart(let distanceMeters) = trackingState {
+            return distanceMeters
+        }
+        return nil
+    }
 
     /// 剩余距离(km):优先用路线匹配结果,退化为 总长 − 已行进。
     var remainingDistanceKm: Double? {
@@ -112,6 +147,33 @@ final class TripSession: ObservableObject {
         let speed = measuredSpeed > 0.3 ? measuredSpeed : plannedSpeed
         guard speed > 0.1 else { return nil }
         return Date().addingTimeInterval(remaining / speed * 3600)
+    }
+
+    var activeElapsedHours: Double {
+        activeElapsedHours(at: Date())
+    }
+
+    func activeElapsedHours(at date: Date) -> Double {
+        if let workoutClock { return workoutClock.elapsedSeconds(at: date) / 3600 }
+        guard let hikeStartDate else { return 0 }
+        return max(0, date.timeIntervalSince(hikeStartDate)) / 3600
+    }
+
+    func pauseWorkout(at date: Date = Date()) {
+        guard phase == .inTrip, trackingState == .recording, !isWorkoutPaused else { return }
+        workoutClock?.pause(at: date)
+        isWorkoutPaused = true
+        recorder.stop()
+        stopMonitoring()
+    }
+
+    func resumeWorkout(at date: Date = Date()) {
+        guard phase == .inTrip, trackingState == .recording, isWorkoutPaused else { return }
+        workoutClock?.resume(at: date)
+        isWorkoutPaused = false
+        recorder.startKeepingHistory()
+        startMonitoring()
+        evaluateActiveStatus()
     }
 
     init() {
@@ -274,6 +336,8 @@ final class TripSession: ObservableObject {
         lastRouteLocationAt = nil
         startGate.reset()
         hikeStartDate = nil
+        workoutClock = nil
+        isWorkoutPaused = false
         trackingState = .waitingGPS
         if let preparedRoute {
             routeMatcher = GPXRouteMatcher(route: preparedRoute)
@@ -295,6 +359,7 @@ final class TripSession: ObservableObject {
     }
 
     func endTrip(retreated: Bool) {
+        if isWorkoutPaused { resumeWorkout(at: Date()) }
         stopMonitoring()
         location.stopMonitoring()
         recorder.stop()
@@ -341,9 +406,9 @@ final class TripSession: ObservableObject {
 
     private func evaluateActiveStatus() {
         guard phase == .inTrip, trackingState == .recording,
-              activeCheckin == nil, !showRetreatSheet else { return }
+              !isWorkoutPaused, activeCheckin == nil, !showRetreatSheet else { return }
         let now = Date()
-        if let hikeStartDate { status.elapsedHours = now.timeIntervalSince(hikeStartDate) / 3600 }
+        status.elapsedHours = activeElapsedHours(at: now)
         if let routeMatcher,
            lastRouteLocationAt.map({ now.timeIntervalSince($0) >= 15 }) ?? false {
             applyRouteMatch(routeMatcher.locationUnavailable(at: now,
@@ -387,6 +452,7 @@ final class TripSession: ObservableObject {
         if trackingState != .recording { updateApproach(with: location) }
         // 到达起点前只更新“距起点距离”，不匹配路线、不记录轨迹，也不更新整体进度。
         guard trackingState == .recording else { return }
+        guard !isWorkoutPaused else { return }
         recorder.append(location)
         guard let routeMatcher else { return }
         let input = RouteLocationInput(
@@ -432,6 +498,8 @@ final class TripSession: ObservableObject {
         status.planDeltaMin = 0
         trackingState = .recording
         hikeStartDate = date
+        workoutClock = WorkoutElapsedClock(startDate: date)
+        isWorkoutPaused = false
         recorder.start()
         events.append(.init(date: date, title: "开始记录",
                             detail: "已到达路线起点,自动开始计时与剩余距离统计", risk: .low))

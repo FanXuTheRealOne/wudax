@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import UIKit
 
 // MARK: - Stage 1：行前采集（只保留 GPX + 过往经历）
 
@@ -11,14 +10,20 @@ struct PlanningChatView: View {
     private var exp: HikerExperience { session.planning.experience }
     private var experienceComplete: Bool { session.planning.experienceComplete }
     private var hasRoute: Bool { session.planning.analyzedGPX != nil }
+    private var isImportingGPX: Bool { session.planning.importPhase == .importing }
     private var canBuild: Bool { experienceComplete && hasRoute }
+    private var visibleChatItems: [PlanningCoordinator.ChatItem] {
+        session.planning.chat.filter { $0.role != .assistant }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
-                    chatStream
+                    if !visibleChatItems.isEmpty {
+                        chatStream
+                    }
                     if !experienceComplete {
                         experienceCard
                     } else {
@@ -41,7 +46,7 @@ struct PlanningChatView: View {
             allowsMultipleSelection: false
         ) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
-            session.planning.importGPX(from: url)
+            Task { await session.planning.importGPXWithProgress(from: url) }
         }
     }
 
@@ -61,7 +66,7 @@ struct PlanningChatView: View {
 
     private var chatStream: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(session.planning.chat) { item in
+            ForEach(visibleChatItems) { item in
                 HStack(alignment: .top, spacing: 9) {
                     if item.role == .assistant {
                         Circle().fill(WDColor.amber).frame(width: 7, height: 7).padding(.top, 6)
@@ -117,18 +122,7 @@ struct PlanningChatView: View {
 
     private var experienceSummary: some View {
         InkCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("你的经验上限", systemImage: "chart.line.uptrend.xyaxis")
-                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                HStack(spacing: 8) {
-                    StatChip(icon: "point.topleft.down.curvedto.point.bottomright.up", label: "最难距离", value: String(format: "%.0f km", exp.hardestDistanceKm), tint: WDColor.bamboo)
-                    StatChip(icon: "mountain.2", label: "最大拔高", value: "\(Int(exp.hardestAscentM)) m", tint: WDColor.amber)
-                }
-                HStack(spacing: 8) {
-                    StatChip(icon: "arrow.up.to.line", label: "最高海拔", value: "\(Int(exp.highestAltitudeM)) m", tint: WDColor.bamboo)
-                    StatChip(icon: "clock", label: "最长耗时", value: String(format: "%.0f h", exp.longestDurationH), tint: WDColor.amber)
-                }
-            }
+            ExperienceLimitSummary(experience: exp)
         }
     }
 
@@ -144,7 +138,9 @@ struct PlanningChatView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("本次 GPX 路线", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
                     .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                if let analyzed = session.planning.analyzedGPX {
+                if isImportingGPX {
+                    GPXImportProgressView()
+                } else if let analyzed = session.planning.analyzedGPX {
                     let stats = analyzed.statistics
                     HStack(spacing: 8) {
                         StatChip(icon: "location", label: "距离", value: String(format: "%.1f km", stats.distanceMeters / 1000), tint: WDColor.bamboo)
@@ -155,9 +151,11 @@ struct PlanningChatView: View {
                     Text("导入你下载的 GPX 轨迹(通常来自别人记录的路线)。")
                         .font(WDFont.caption()).foregroundStyle(WDColor.mist)
                 }
-                GhostButton(title: hasRoute ? "重新导入 GPX" : "选择 GPX 文件") {
+                GhostButton(title: isImportingGPX ? "正在读取 GPX…" : (hasRoute ? "重新导入 GPX" : "选择 GPX 文件")) {
                     showImporter = true
                 }
+                .disabled(isImportingGPX)
+                .opacity(isImportingGPX ? 0.56 : 1)
                 .accessibilityIdentifier("gpx-import-button")
                 if let error = session.planning.importError {
                     Text(error).font(WDFont.caption()).foregroundStyle(WDColor.cinnabar)
@@ -168,6 +166,92 @@ struct PlanningChatView: View {
 
     private func number(_ option: String) -> Double {
         Double(option.split(separator: " ").first ?? "0") ?? 0
+    }
+}
+
+struct ExperienceLimitSummary: View {
+    let experience: HikerExperience
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(WDColor.ink)
+                    .frame(width: 38, height: 38)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("你的经验上限").font(WDFont.heading(17)).foregroundStyle(WDColor.ricePaper)
+                    Text("用于估算这条 GPX 对你的真实难度")
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                limitMetric("最难距离", value: String(format: "%.0f", experience.hardestDistanceKm), unit: "km")
+                Divider().frame(height: 42).overlay(WDColor.line)
+                limitMetric("最大拔高", value: "\(Int(experience.hardestAscentM))", unit: "m")
+            }
+
+            HStack(spacing: 10) {
+                compactLimit(icon: "arrow.up.to.line", title: "最高海拔", value: "\(Int(experience.highestAltitudeM)) m")
+                compactLimit(icon: "clock", title: "最长耗时", value: String(format: "%.0f h", experience.longestDurationH))
+            }
+        }
+    }
+
+    private func limitMetric(_ title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(value)
+                    .font(.system(size: 31, weight: .semibold, design: .serif))
+                    .foregroundStyle(WDColor.ink)
+                Text(unit).font(WDFont.body(13).weight(.medium)).foregroundStyle(WDColor.mist)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func compactLimit(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(WDColor.bamboo)
+            Text(title).font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
+            Spacer(minLength: 4)
+            Text(value).font(WDFont.mono(12)).foregroundStyle(WDColor.ricePaper)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface.opacity(0.78)))
+    }
+}
+
+struct GPXImportProgressView: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(WDColor.mossSurface)
+                ProgressView()
+                    .tint(WDColor.bamboo)
+            }
+            .frame(width: 42, height: 42)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("正在读取 GPX")
+                    .font(WDFont.body(14).weight(.semibold))
+                    .foregroundStyle(WDColor.ricePaper)
+                Text("解析轨迹点、海拔与数据质量，完成后保存在本机。")
+                    .font(WDFont.caption(11))
+                    .foregroundStyle(WDColor.mist)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(WDColor.mossSurface.opacity(0.55)))
     }
 }
 

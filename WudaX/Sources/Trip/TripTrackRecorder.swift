@@ -7,16 +7,25 @@ final class TripTrackRecorder: ObservableObject {
     @Published private(set) var points: [RecordedTrackPoint] = []
     @Published private(set) var distanceMeters: Double = 0
     @Published private(set) var isRecording = false
+    private var startsNewDistanceSegment = false
 
     func start() {
         points = []
         distanceMeters = 0
         isRecording = true
+        startsNewDistanceSegment = false
+    }
+
+    func startKeepingHistory() {
+        isRecording = true
+        startsNewDistanceSegment = true
     }
 
     func append(_ location: CLLocation) {
         guard isRecording, location.horizontalAccuracy >= 0 else { return }
-        if let previous = points.last {
+        if startsNewDistanceSegment {
+            startsNewDistanceSegment = false
+        } else if let previous = points.last {
             let previousLocation = CLLocation(latitude: previous.latitude, longitude: previous.longitude)
             let delta = location.distance(from: previousLocation)
             // Filter GPS jumps while retaining slow hiking movement.

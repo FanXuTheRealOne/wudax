@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WUDAX · 离线徒步疲劳与风险管理 Agent</title>
+    <meta
+      name="description"
+      content="WUDAX 将 GPX 路线、补给、疲劳、位置与端侧 Agent 放进同一条离线风险决策链。"
+    />
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="%2317382D"/><text x="32" y="42" text-anchor="middle" font-size="30" font-family="Arial, sans-serif" font-weight="700" fill="%23FCFBF6">无</text></svg>' />
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="WUDAX landing page header">
+      <a class="brand" href="#top" aria-label="WUDAX home">
+        <span class="brand-mark">无</span>
+        <span>WUDAX</span>
+      </a>
+      <nav aria-label="页面导航">
+        <a href="#video">影片</a>
+        <a href="#model">3D 模型</a>
+        <a href="#flow">行程闭环</a>
+        <a href="#safety">安全边界</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Offline hiking fatigue agent</p>
+          <h1>在山里，真正重要的是余量。</h1>
+          <p class="lead">
+            WUDAX 把 GPX 路线、补给、疲劳、日照窗口、弱 GPS 与端侧 Agent 合成一条本地决策链。
+            平时安静；当风险叠加时，给出明确、可解释、可执行的继续或下撤建议。
+          </p>
+          <div class="hero-actions">
+            <a class="primary" href="#video">观看产品影片</a>
+            <a class="secondary" href="#model">旋转 3D 外骨骼</a>
+          </div>
+          <dl class="hero-stats" aria-label="WUDAX capability highlights">
+            <div>
+              <dt>0</dt>
+              <dd>核心判断依赖网络</dd>
+            </div>
+            <div>
+              <dt>GPX</dt>
+              <dd>路线离线匹配</dd>
+            </div>
+            <div>
+              <dt>端侧</dt>
+              <dd>模型只做解释</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="hero-visual" aria-label="WUDAX app screens">
+          <img class="phone phone-main" src="../screenshots/home.png" alt="WUDAX 行程首页截图" />
+          <img class="phone phone-float" src="../screenshots/checkin.png" alt="WUDAX 行中状态问询截图" />
+          <div class="route-card">
+            <span>当前建议</span>
+            <strong>谨慎继续 · 90 分钟后复核</strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="video" class="section video-section">
+        <div class="section-heading">
+          <p class="eyebrow">Launch film</p>
+          <h2>一支先由分镜和图像串起的产品短片。</h2>
+          <p>
+            当前版本使用现有设计图和应用截图串成可替换素材的 teaser。完整制作脚本、运镜和旁白在
+            <code>landing/video/</code> 中维护。
+          </p>
+        </div>
+        <div class="video-frame">
+          <video controls playsinline preload="metadata" poster="../design/ink_mountains.png">
+            <source src="../assets/video/wudax-launch.mp4" type="video/mp4" />
+            你的浏览器不支持视频播放。
+          </video>
+        </div>
+      </section>
+
+      <section id="model" class="section model-section">
+        <div class="model-copy">
+          <p class="eyebrow">Interactive hardware preview</p>
+          <h2>膝关节外骨骼 · v2.0 数据接入预留</h2>
+          <p>
+            拖动旋转模型，观察膝部铰链、腿部固定带与外侧执行器。未来版本会把外骨骼力学信号接入疲劳判断，
+            减少行中手动问询。
+          </p>
+          <ul class="feature-list">
+            <li>膝部制动余量进入风险规则</li>
+            <li>长下坡前主动提醒配速与休息</li>
+            <li>本地计算，不上传身体状态</li>
+          </ul>
+        </div>
+        <div class="model-card">
+          <model-viewer
+            src="../assets/3d/exoskeleton.glb"
+            ios-src="../assets/3d/exoskeleton.usdz"
+            alt="WUDAX 膝关节外骨骼 3D 模型"
+            camera-controls
+            touch-action="pan-y"
+            auto-rotate
+            auto-rotate-delay="1000"
+            rotation-per-second="18deg"
+            shadow-intensity="0.7"
+            exposure="0.95"
+            environment-image="neutral"
+            ar
+            ar-modes="webxr scene-viewer quick-look">
+          </model-viewer>
+          <p class="model-hint">拖动旋转 · 滚轮缩放 · 支持 iOS Quick Look</p>
+        </div>
+      </section>
+
+      <section id="flow" class="section flow-section">
+        <div class="section-heading compact">
+          <p class="eyebrow">Trip loop</p>
+          <h2>从出发前到下撤窗口，所有判断都能追溯。</h2>
+        </div>
+        <div class="flow-grid">
+          <article>
+            <img src="../screenshots/budget.png" alt="行前预算卡截图" />
+            <span>01</span>
+            <h3>行前认识余量</h3>
+            <p>比对路线负荷与个人经验上限，给出补给、装备和挑战评级。</p>
+          </article>
+          <article>
+            <img src="../screenshots/gate.png" alt="出发守门截图" />
+            <span>02</span>
+            <h3>出发守门</h3>
+            <p>确认 GPX、补给、权限与离线资源，不把未完成准备伪装成就绪。</p>
+          </article>
+          <article>
+            <img src="../screenshots/retreat.png" alt="下撤建议截图" />
+            <span>03</span>
+            <h3>风险收紧时行动</h3>
+            <p>在补给、日照、长下坡和身体信号叠加时，明确建议降级或下撤。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="safety" class="section safety-section">
+        <div>
+          <p class="eyebrow">Safety contract</p>
+          <h2>Agent 解释风险，但不决定风险。</h2>
+        </div>
+        <p>
+          WUDAX 的安全结论来自确定性 Swift 规则。端侧小模型只负责把路线、补给和状态结果解释成人能快速理解的话；
+          它不能降低风险等级，也不能创造未受控行动。
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>无待 · 自在前行</span>
+      <a href="../README.md">查看仓库说明</a>
+    </footer>
+  </body>
+</html>

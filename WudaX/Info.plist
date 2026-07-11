@@ -20,6 +20,10 @@
 	<string>WUDAX 在你主动开始行程后继续记录路线进度和安全事件。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>WUDAX 使用定位匹配路线进度并在行中进行安全评估。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WUDAX 使用麦克风把你的语音问题转成当前行程 Agent 的文字输入。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WUDAX 使用本机语音识别把你的语音问题转成当前行程 Agent 的文字输入。</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>WUDAX 只在风险升级或冷却期结束时提醒你确认状态。</string>
 	<key>UIBackgroundModes</key>

@@ -292,6 +292,21 @@ struct TripDashboardView: View {
             }
 
             HStack(spacing: 10) {
+                if session.trackingState == .recording {
+                    Button {
+                        session.isWorkoutPaused ? session.resumeWorkout() : session.pauseWorkout()
+                    } label: {
+                        Label(session.isWorkoutPaused ? "继续" : "暂停",
+                              systemImage: session.isWorkoutPaused ? "play.fill" : "pause.fill")
+                            .font(WDFont.body(15).weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(WDColor.bamboo))
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Button { showDetailSheet = true } label: {
                     Label("详情", systemImage: "list.bullet.rectangle")
                         .font(WDFont.body(15).weight(.medium))
@@ -323,24 +338,30 @@ struct TripDashboardView: View {
         .padding(.bottom, 8)
     }
 
-    /// 记录中:计时 + 剩余公里 + 已行进,每秒刷新。
+    /// 记录中:有效耗时、平均配速、里程与导航状态。
     private var recordingStats: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(spacing: 12) {
                 HStack(spacing: 0) {
-                    bigStat(label: "计时", value: elapsedText(at: context.date), tint: WDColor.bamboo)
+                    bigStat(label: "运动耗时", value: elapsedText(at: context.date), tint: WDColor.bamboo)
                     statDivider
-                    bigStat(label: "剩余(km)", value: remainingKmText, tint: WDColor.ink)
+                    bigStat(label: "平均配速",
+                            value: formatWorkoutPace(distanceKm: session.recorder.distanceMeters / 1_000,
+                                                     elapsedHours: session.activeElapsedHours(at: context.date)),
+                            tint: WDColor.ink)
                     statDivider
-                    bigStat(label: "已行进(km)", value: String(format: "%.1f", session.status.elapsedKm), tint: WDColor.ink)
+                    bigStat(label: "本次里程",
+                            value: String(format: "%.1f km", session.recorder.distanceMeters / 1_000),
+                            tint: WDColor.ink)
                 }
                 HStack(spacing: 12) {
-                    smallStat("clock.badge.checkmark", "预计到达 \(etaText)")
+                    smallStat("flag.checkered", "剩余 \(remainingKmText) km")
                     if let match = session.routeMatch {
                         smallStat("mountain.2", "剩余爬升 \(Int(match.remainingAscentMeters.rounded())) m")
                     }
-                    smallStat("antenna.radiowaves.left.and.right", gpsText,
-                              tint: gpsTint)
+                    smallStat("antenna.radiowaves.left.and.right",
+                              session.isWorkoutPaused ? "已暂停" : gpsText,
+                              tint: session.isWorkoutPaused ? WDColor.amber : gpsTint)
                     Spacer()
                 }
                 if session.routeMatch?.isOffRoute == true {
@@ -416,9 +437,18 @@ struct TripDashboardView: View {
     // MARK: 文案
 
     private func elapsedText(at now: Date) -> String {
-        guard let start = session.hikeStartDate else { return "00:00:00" }
-        let seconds = max(Int(now.timeIntervalSince(start)), 0)
+        guard session.hikeStartDate != nil else { return "00:00:00" }
+        let seconds = max(Int(session.activeElapsedHours(at: now) * 3600), 0)
         return String(format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+    }
+
+    private func formatWorkoutPace(distanceKm: Double, elapsedHours: Double) -> String {
+        guard distanceKm > 0.02, elapsedHours > 0 else { return "—" }
+        let paceSecondsPerKm = elapsedHours * 3600 / distanceKm
+        guard paceSecondsPerKm.isFinite, paceSecondsPerKm < 99 * 60 else { return "—" }
+        let minutes = Int(paceSecondsPerKm) / 60
+        let seconds = Int(paceSecondsPerKm) % 60
+        return String(format: "%d'%02d''", minutes, seconds)
     }
 
     private var remainingKmText: String {

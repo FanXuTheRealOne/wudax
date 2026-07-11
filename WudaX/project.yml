@@ -19,6 +19,8 @@ settings:
     INFOPLIST_KEY_NSHealthShareUsageDescription: "WUDAX 读取徒步准备相关的健康数据，用于离线疲劳评估。"
     INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "WUDAX 使用定位匹配路线进度并在行中进行安全评估。"
     INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "WUDAX 在你主动开始行程后继续记录路线进度和安全事件。"
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: "WUDAX 使用麦克风把你的语音问题转成当前行程 Agent 的文字输入。"
+    INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "WUDAX 使用本机语音识别把你的语音问题转成当前行程 Agent 的文字输入。"
     INFOPLIST_KEY_NSUserNotificationsUsageDescription: "WUDAX 只在风险升级或冷却期结束时提醒你确认状态。"
     INFOPLIST_KEY_UIBackgroundModes: [location]
 targets:

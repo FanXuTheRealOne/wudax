@@ -7,13 +7,22 @@ import Foundation
 
 // MARK: 前方路线前瞻
 
-/// 从预处理路线 + 当前进度计算「路线的未来情况」:前方坡度/爬升、分段概览、下一航点、将到的风险点。
+/// 从预处理路线 + 当前进度计算「路线的未来情况」。
+/// 海拔一律走 RouteElevationProfiler 的平滑剖面 —— GPX 第三维噪声很大,
+/// 逐点累计会把平路算出上百米假爬升。
 struct RouteLookahead: Equatable {
     struct Upcoming: Equatable {
         var title: String
         var distanceMeters: Double
     }
 
+    /// 当前位置的平滑海拔与脚下坡度。
+    var currentElevationMeters: Double?
+    var currentGradePercent: Double?
+    /// 马上(前方 0–300 m)的坡度趋势 —— 回答「等会是下坡吗」的第一句。
+    var immediateTrend: RouteElevationProfiler.Trend?
+    /// 稍后(前方 300–1500 m)的坡度趋势。
+    var upcomingTrend: RouteElevationProfiler.Trend?
     var nextKmAscentMeters: Double
     var nextKmDescentMeters: Double
     var nextKmAvgGradePercent: Double?
@@ -26,29 +35,36 @@ struct RouteLookahead: Equatable {
     static func compute(route: PreparedGPXRoute,
                         progressMeters: Double,
                         riskPoints: [(title: String, progressMeters: Double)],
+                        profiler providedProfiler: RouteElevationProfiler? = nil,
                         maxSegments: Int = 4) -> RouteLookahead {
-        let vertices = route.vertices
-        guard vertices.count >= 2 else {
-            return RouteLookahead(nextKmAscentMeters: 0, nextKmDescentMeters: 0,
-                                  nextKmAvgGradePercent: nil, segmentSummaries: [],
-                                  nextWaypoint: nil, upcomingRiskPoints: [])
-        }
+        let profiler = providedProfiler ?? RouteElevationProfiler(route: route)
 
-        let (ascent1km, descent1km) = elevationChange(vertices: vertices,
-                                                      from: progressMeters,
-                                                      to: progressMeters + 1_000)
-        let horizontal = min(1_000, max(route.totalDistanceMeters - progressMeters, 1))
-        let net = netElevationChange(vertices: vertices, from: progressMeters, to: progressMeters + 1_000)
-        let grade: Double? = net.map { ($0 / horizontal) * 100 }
-
+        var currentElevation: Double?
+        var currentGrade: Double?
+        var immediate: RouteElevationProfiler.Trend?
+        var upcoming: RouteElevationProfiler.Trend?
+        var nextKmAscent = 0.0, nextKmDescent = 0.0
+        var nextKmGrade: Double?
         var summaries: [String] = []
-        var cursor = progressMeters
-        while cursor < route.totalDistanceMeters, summaries.count < maxSegments {
-            let end = min(cursor + 2_000, route.totalDistanceMeters)
-            let (up, down) = elevationChange(vertices: vertices, from: cursor, to: end)
-            let range = String(format: "%.1f–%.1f km", cursor / 1_000, end / 1_000)
-            summaries.append("\(range):\(describe(ascent: up, descent: down))")
-            cursor = end
+
+        if let profiler {
+            currentElevation = profiler.elevation(atProgress: progressMeters)
+            currentGrade = profiler.gradePercent(atProgress: progressMeters)
+            immediate = profiler.trend(fromProgress: progressMeters, spanMeters: 300)
+            upcoming = profiler.trend(fromProgress: progressMeters + 300, spanMeters: 1_200)
+            if let nextKm = profiler.trend(fromProgress: progressMeters, spanMeters: 1_000) {
+                nextKmAscent = nextKm.ascentMeters
+                nextKmDescent = nextKm.descentMeters
+                nextKmGrade = nextKm.averageGradePercent
+            }
+            var cursor = progressMeters
+            while cursor < route.totalDistanceMeters, summaries.count < maxSegments {
+                let end = min(cursor + 2_000, route.totalDistanceMeters)
+                if let trend = profiler.trend(fromProgress: cursor, spanMeters: end - cursor) {
+                    summaries.append(String(format: "%.1f–%.1f km:%@", cursor / 1_000, end / 1_000, trend.summary))
+                }
+                cursor = end
+            }
         }
 
         let nextWaypoint = route.waypoints
@@ -62,47 +78,16 @@ struct RouteLookahead: Equatable {
             .sorted { $0.progressMeters < $1.progressMeters }
             .map { Upcoming(title: $0.title, distanceMeters: $0.progressMeters - progressMeters) }
 
-        return RouteLookahead(nextKmAscentMeters: ascent1km,
-                              nextKmDescentMeters: descent1km,
-                              nextKmAvgGradePercent: grade,
+        return RouteLookahead(currentElevationMeters: currentElevation,
+                              currentGradePercent: currentGrade,
+                              immediateTrend: immediate,
+                              upcomingTrend: upcoming,
+                              nextKmAscentMeters: nextKmAscent,
+                              nextKmDescentMeters: nextKmDescent,
+                              nextKmAvgGradePercent: nextKmGrade,
                               segmentSummaries: summaries,
                               nextWaypoint: nextWaypoint,
                               upcomingRiskPoints: upcomingRisks)
-    }
-
-    /// 区间内正向爬升与下降的累计值。
-    private static func elevationChange(vertices: [PreparedRouteVertex],
-                                        from: Double, to: Double) -> (ascent: Double, descent: Double) {
-        var ascent = 0.0, descent = 0.0
-        var previous: Double?
-        for vertex in vertices {
-            guard vertex.cumulativeDistanceMeters >= from else { continue }
-            guard vertex.cumulativeDistanceMeters <= to else { break }
-            guard let elevation = vertex.elevationMeters else { continue }
-            if let prev = previous {
-                let delta = elevation - prev
-                if delta > 0 { ascent += delta } else { descent -= delta }
-            }
-            previous = elevation
-        }
-        return (ascent, descent)
-    }
-
-    private static func netElevationChange(vertices: [PreparedRouteVertex],
-                                           from: Double, to: Double) -> Double? {
-        let inRange = vertices.filter { $0.cumulativeDistanceMeters >= from && $0.cumulativeDistanceMeters <= to }
-        guard let first = inRange.first?.elevationMeters, let last = inRange.last?.elevationMeters else { return nil }
-        return last - first
-    }
-
-    private static func describe(ascent: Double, descent: Double) -> String {
-        switch (ascent, descent) {
-        case let (up, down) where up < 30 && down < 30: return "较平缓"
-        case let (up, down) where up >= down && up >= 150: return "陡升 \(Int(up)) m"
-        case let (up, down) where up >= down: return "缓升 \(Int(up)) m"
-        case let (_, down) where down >= 150: return "陡降 \(Int(down)) m(注意膝盖)"
-        default: return "缓降 \(Int(descent)) m"
-        }
     }
 }
 
@@ -336,7 +321,19 @@ enum AgentDataBus {
         let progress = session.routeMatch?.routeProgressMeters ?? 0
         let risks = riskPointProgress(route: session.plan.route,
                                       totalDistanceMeters: prepared.totalDistanceMeters)
-        return RouteLookahead.compute(route: prepared, progressMeters: progress, riskPoints: risks)
+        return RouteLookahead.compute(route: prepared, progressMeters: progress,
+                                      riskPoints: risks, profiler: profiler(for: prepared))
+    }
+
+    /// 海拔剖面分析器缓存:信号检测每 2 秒会取一次 lookahead,平滑不必重算。
+    private static var profilerCache: (key: String, profiler: RouteElevationProfiler)?
+
+    static func profiler(for route: PreparedGPXRoute) -> RouteElevationProfiler? {
+        let key = "\(route.name)|\(route.vertices.count)|\(Int(route.totalDistanceMeters))"
+        if let cached = profilerCache, cached.key == key { return cached.profiler }
+        guard let built = RouteElevationProfiler(route: route) else { return nil }
+        profilerCache = (key, built)
+        return built
     }
 
     // MARK: 分节
@@ -405,6 +402,9 @@ enum AgentDataBus {
         case .waitingGPS: parts.append("等待 GPS 定位")
         case .toStart(let d): parts.append(String(format: "正在前往路线起点,还差 %@", distanceText(d)))
         case .recording:
+            if let toStart = s.distanceToStartMeters {
+                parts.append(String(format: "正在前往路线起点,还差 %@", distanceText(toStart)))
+            }
             if let start = s.hikeStartDate {
                 parts.append("已记录 \(durationText(Date().timeIntervalSince(start)))")
             }
@@ -429,20 +429,44 @@ enum AgentDataBus {
             }
         }
         parts.append(String(format: "距日落 %.1f 小时", s.status.hoursToSunset))
+        // 实时传感器原始数据:坐标/海拔/速度/朝向/精度全量暴露。
+        if let location = s.location.latestLocation {
+            parts.append(String(format: "当前坐标 %.5f, %.5f",
+                                location.coordinate.latitude, location.coordinate.longitude))
+            if location.verticalAccuracy >= 0 {
+                parts.append("GPS 海拔 \(Int(location.altitude)) m")
+            }
+            if location.speed >= 0 {
+                parts.append(String(format: "瞬时速度 %.1f km/h", location.speed * 3.6))
+            }
+            if location.horizontalAccuracy >= 0 {
+                parts.append("定位精度 ±\(Int(location.horizontalAccuracy)) m")
+            }
+        }
+        if let heading = s.location.headingDegrees {
+            parts.append("朝向 \(Int(heading))°")
+        }
         return "【实时】" + parts.joined(separator: ";")
     }
 
     private static func lookaheadSection(_ s: TripSession) -> String? {
         guard case .recording = s.trackingState, let ahead = lookahead(session: s) else { return nil }
         var parts: [String] = []
-        if ahead.nextKmAscentMeters >= 20 || ahead.nextKmDescentMeters >= 20 {
-            var text = "前方 1 km:"
-            if ahead.nextKmAscentMeters >= 20 { text += "爬升 \(Int(ahead.nextKmAscentMeters)) m " }
-            if ahead.nextKmDescentMeters >= 20 { text += "下降 \(Int(ahead.nextKmDescentMeters)) m" }
-            if let grade = ahead.nextKmAvgGradePercent { text += String(format: "(平均坡度 %.0f%%)", grade) }
+        if let match = s.routeMatch {
+            parts.append(String(format: "当前位于路线 %.1f km 处", match.routeProgressMeters / 1_000))
+        }
+        if let elevation = ahead.currentElevationMeters {
+            var text = "路线海拔约 \(Int(elevation)) m"
+            if let grade = ahead.currentGradePercent {
+                text += String(format: ",脚下坡度 %+.0f%%", grade)
+            }
             parts.append(text)
-        } else {
-            parts.append("前方 1 km 较平缓")
+        }
+        if let immediate = ahead.immediateTrend {
+            parts.append("马上(前方300m):\(immediate.summary)")
+        }
+        if let upcoming = ahead.upcomingTrend {
+            parts.append("稍后(0.3–1.5km):\(upcoming.summary)")
         }
         if let risk = ahead.upcomingRiskPoints.first {
             parts.append("距「\(risk.title)」还有 \(distanceText(risk.distanceMeters))")
@@ -451,7 +475,7 @@ enum AgentDataBus {
             parts.append("下一航点「\(wp.title)」还有 \(distanceText(wp.distanceMeters))")
         }
         if !ahead.segmentSummaries.isEmpty {
-            parts.append("后续:" + ahead.segmentSummaries.joined(separator: ";"))
+            parts.append("后续分段:" + ahead.segmentSummaries.joined(separator: ";"))
         }
         return "【前方路线】" + parts.joined(separator: "。")
     }

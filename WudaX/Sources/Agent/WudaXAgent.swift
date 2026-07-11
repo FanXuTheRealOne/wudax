@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import AVFoundation
+import Speech
 
 // MARK: - 全局 WUDAX Agent
 // App 级唯一实例(对应架构图最外层的 agent 圈);每次徒步 session 在其内部
@@ -21,6 +23,232 @@ struct AgentMessage: Identifiable, Equatable {
     var signalHeadline: String?
     /// true = LLM 不可用,内容为规则引擎文案。
     var isFallback = false
+}
+
+/// Agent 语音功能的用户偏好。默认 text-only,避免一进页面就抢麦克风或突然外放。
+struct AgentVoicePreferences: Equatable {
+    var voiceInputEnabled = false
+    var spokenRepliesEnabled = false
+    var proactiveSpeechEnabled = false
+
+    func shouldSpeak(role: AgentMessage.Role) -> Bool {
+        switch role {
+        case .assistant:
+            return spokenRepliesEnabled
+        case .proactive:
+            return spokenRepliesEnabled && proactiveSpeechEnabled
+        case .user:
+            return false
+        }
+    }
+}
+
+enum AgentVoiceRuntimeStatus: Equatable {
+    case idle
+    case requestingPermission
+    case listening
+    case transcribing(String)
+    case speaking
+    case permissionDenied
+    case recognitionUnavailable
+    case onDeviceRecognitionUnavailable
+    case failed(String)
+
+    var displayText: String {
+        switch self {
+        case .idle:
+            return "语音待命"
+        case .requestingPermission:
+            return "正在请求语音权限"
+        case .listening:
+            return "正在听你说话"
+        case .transcribing(let text):
+            return text.isEmpty ? "正在识别语音" : "识别中:\(text)"
+        case .speaking:
+            return "正在播报"
+        case .permissionDenied:
+            return "麦克风或语音识别权限未开启"
+        case .recognitionUnavailable:
+            return "语音识别暂不可用"
+        case .onDeviceRecognitionUnavailable:
+            return "当前设备不支持离线语音识别"
+        case .failed(let message):
+            return message
+        }
+    }
+}
+
+@MainActor
+final class AgentVoiceIOService: NSObject, ObservableObject {
+    @Published private(set) var status: AgentVoiceRuntimeStatus = .idle
+    @Published private(set) var partialTranscript = ""
+
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh_CN"))
+    private let audioEngine = AVAudioEngine()
+    private let synthesizer = AVSpeechSynthesizer()
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    var isListening: Bool { audioEngine.isRunning }
+
+    func requestPermissions() async -> Bool {
+        status = .requestingPermission
+        let micGranted = await requestMicrophonePermission()
+        guard micGranted else {
+            status = .permissionDenied
+            return false
+        }
+
+        let speechGranted = await requestSpeechPermission()
+        guard speechGranted else {
+            status = .permissionDenied
+            return false
+        }
+
+        status = .idle
+        return true
+    }
+
+    func startListening(onFinalTranscript: @escaping @MainActor (String) -> Void) async {
+        guard await requestPermissions() else { return }
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            status = .recognitionUnavailable
+            return
+        }
+
+        stopListening(submitPartial: false)
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        if speechRecognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        } else {
+            status = .onDeviceRecognitionUnavailable
+            return
+        }
+
+        recognitionRequest = request
+        partialTranscript = ""
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetooth])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+
+            let input = audioEngine.inputNode
+            let format = input.outputFormat(forBus: 0)
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
+                request?.append(buffer)
+            }
+
+            audioEngine.prepare()
+            try audioEngine.start()
+            status = .listening
+
+            recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let text = result?.bestTranscription.formattedString {
+                        self.partialTranscript = text
+                        self.status = .transcribing(text)
+                    }
+
+                    if result?.isFinal == true {
+                        let final = self.partialTranscript
+                        self.stopListening(submitPartial: false)
+                        onFinalTranscript(final)
+                    } else if error != nil {
+                        self.stopListening(submitPartial: false)
+                        self.status = .failed("语音识别中断，请再试一次")
+                    }
+                }
+            }
+        } catch {
+            stopListening(submitPartial: false)
+            status = .failed("麦克风启动失败")
+        }
+    }
+
+    func stopListening(submitPartial: Bool = true, onFinalTranscript: (@MainActor (String) -> Void)? = nil) {
+        let final = partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+        partialTranscript = ""
+        status = .idle
+
+        if submitPartial, !final.isEmpty {
+            onFinalTranscript?(final)
+        }
+    }
+
+    func speak(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        let utterance = AVSpeechUtterance(string: trimmed)
+        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        utterance.pitchMultiplier = 0.98
+        status = .speaking
+        synthesizer.speak(utterance)
+    }
+
+    func stopSpeaking() {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        status = .idle
+    }
+
+    private func requestMicrophonePermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+    }
+
+    private func requestSpeechPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+    }
+}
+
+extension AgentVoiceIOService: AVSpeechSynthesizerDelegate {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.status = .idle
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.status = .idle
+        }
+    }
 }
 
 /// 一次徒步 session 的独立 agent 上下文。
@@ -52,8 +280,10 @@ final class WudaXAgent: ObservableObject {
     @Published var latestBanner: AgentMessage?
     /// 问答生成中(播报生成不置此标志)。
     @Published private(set) var isResponding = false
+    @Published var voicePreferences = AgentVoicePreferences()
 
     let llm: LocalLLMService
+    let voice: AgentVoiceIOService
 
     private weak var session: TripSession?
     private var cancellables = Set<AnyCancellable>()
@@ -65,8 +295,9 @@ final class WudaXAgent: ObservableObject {
     用简体中文,口语、具体、简短;引用的数字必须来自快照,不要编造。
     """
 
-    init(llm: LocalLLMService? = nil) {
+    init(llm: LocalLLMService? = nil, voice: AgentVoiceIOService? = nil) {
         self.llm = llm ?? LocalLLMService()
+        self.voice = voice ?? AgentVoiceIOService()
     }
 
     // MARK: 挂接 TripSession(TripSession 本身零改动)
@@ -195,6 +426,7 @@ final class WudaXAgent: ObservableObject {
         context.messages.append(message)
         context.unreadCount += 1
         latestBanner = message
+        speakIfNeeded(message)
         Haptics.tap()
     }
 
@@ -261,21 +493,85 @@ final class WudaXAgent: ObservableObject {
         isResponding = true
         defer { isResponding = false }
 
-        let system = Self.persona + "\n\n" + AgentDataBus.fullSnapshot(session: session) + "\n/no_think"
+        // 0.6B 小模型对 system prompt 中大段资料的检索能力很弱:把全量快照
+        // 直接嵌进当前这条 user 消息、紧贴问题本身,它才会真的使用这些数据;
+        // system 只留简短人设,历史只带纯对话文本。
+        let snapshot = AgentDataBus.fullSnapshot(session: session)
+        let question = """
+        【当前行程快照(唯一事实来源)】
+        \(snapshot)
+
+        用户问题:\(trimmed)
+        只根据上面的快照回答,引用其中的数字;快照里没有的信息就直说没有。用一到三句口语中文。 /no_think
+        """
+
         // 只带当前 session context 的对话历史(独立 context 的关键);
-        // 主动播报作为 assistant 历史,让模型知道自己说过什么。
-        let history: [(role: LocalLLMService.Msg.Role, text: String)] = context.messages.suffix(12).map {
-            (role: $0.role == .user ? .user : .assistant, text: $0.text)
-        }
+        // 去掉刚追加的这条 user 消息,它以带快照的形式重新加入。
+        var history: [(role: LocalLLMService.Msg.Role, text: String)] =
+            context.messages.dropLast().suffix(8).map {
+                (role: $0.role == .user ? .user : .assistant, text: $0.text)
+            }
+        history.append((role: .user, text: question))
 
         do {
-            let reply = try await llm.respond(system: system, history: history)
-            context.messages.append(AgentMessage(role: .assistant, text: reply, date: Date()))
+            let reply = try await llm.respond(system: Self.persona, history: history, maxTokens: 320)
+            guard !reply.isEmpty else { throw NSError(domain: "WUDAX", code: -4) }
+            let message = AgentMessage(role: .assistant, text: reply, date: Date())
+            context.messages.append(message)
+            speakIfNeeded(message)
         } catch {
-            // 模拟器/加载失败:退回数据摘要,窗口仍然有用。
+            // 模拟器/加载失败/空输出:退回数据摘要,窗口仍然有用。
             let fallback = "本机模型暂不可用,给你当前数据摘要:\n" + AgentDataBus.compactSnapshot(session: session)
-            context.messages.append(AgentMessage(role: .assistant, text: fallback,
-                                                 date: Date(), isFallback: true))
+            let message = AgentMessage(role: .assistant, text: fallback, date: Date(), isFallback: true)
+            context.messages.append(message)
+            speakIfNeeded(message)
         }
+    }
+
+    // MARK: 语音输入/输出
+
+    func toggleVoiceInput() {
+        voicePreferences.voiceInputEnabled.toggle()
+        if !voicePreferences.voiceInputEnabled {
+            voice.stopListening()
+        }
+    }
+
+    func toggleSpokenReplies() {
+        voicePreferences.spokenRepliesEnabled.toggle()
+        if !voicePreferences.spokenRepliesEnabled {
+            voice.stopSpeaking()
+        }
+    }
+
+    func toggleProactiveSpeech() {
+        voicePreferences.proactiveSpeechEnabled.toggle()
+        if voicePreferences.proactiveSpeechEnabled {
+            voicePreferences.spokenRepliesEnabled = true
+        }
+    }
+
+    func startVoiceQuestion() {
+        guard voicePreferences.voiceInputEnabled else { return }
+        Task {
+            await voice.startListening { [weak self] transcript in
+                Task { await self?.handleRecognizedVoiceText(transcript) }
+            }
+        }
+    }
+
+    func stopVoiceQuestion() {
+        voice.stopListening { [weak self] transcript in
+            Task { await self?.handleRecognizedVoiceText(transcript) }
+        }
+    }
+
+    func handleRecognizedVoiceText(_ text: String) async {
+        await ask(text)
+    }
+
+    private func speakIfNeeded(_ message: AgentMessage) {
+        guard voicePreferences.shouldSpeak(role: message.role) else { return }
+        voice.speak(message.text)
     }
 }

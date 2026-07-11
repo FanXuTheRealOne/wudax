@@ -4,10 +4,13 @@ import UIKit
 /// 「设置」Tab —— 外骨骼 3D 展示、健康授权入口、关于。
 struct SettingsTabView: View {
     @EnvironmentObject var session: TripSession
-    @State private var showExo = false
+    @EnvironmentObject var sessionAgent: WudaXAgent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isRequestingHealth = false
     @State private var showHealthResult = false
     @State private var healthResultMessage = ""
+    @State private var modelLoadState: Bool?
+    @State private var modelAppeared = false
 
     var body: some View {
         ZStack {
@@ -17,30 +20,9 @@ struct SettingsTabView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
 
-                    // 外骨骼 3D —— 从首页迁移到这里
-                    Button { showExo = true } label: {
-                        InkCard {
-                            HStack(spacing: 14) {
-                                Group {
-                                    if let ui = UIImage(named: "exo_thumb") {
-                                        Image(uiImage: ui).resizable().scaledToFit()
-                                    } else {
-                                        Image(systemName: "figure.walk.motion")
-                                            .font(.system(size: 26, weight: .light)).foregroundStyle(WDColor.amber)
-                                    }
-                                }
-                                .frame(width: 54, height: 54)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("WUDAX 膝关节外骨骼").font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                                    Text("v2.0 数据接入预留 · 查看 3D 模型").font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(WDColor.mist)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    exoskeletonSection
+
+                    voiceGroup
 
                     settingsGroup
 
@@ -51,7 +33,6 @@ struct SettingsTabView: View {
                 .padding(.top, 12)
             }
         }
-        .sheet(isPresented: $showExo) { ExoShowcaseView() }
         .alert("Apple Health", isPresented: $showHealthResult) {
             Button("知道了", role: .cancel) {}
         } message: {
@@ -59,6 +40,13 @@ struct SettingsTabView: View {
         }
         .task {
             await session.refreshAppleHealthAccess()
+        }
+        .onAppear {
+            if reduceMotion {
+                modelAppeared = true
+            } else {
+                withAnimation(.spring(duration: 1.0).delay(0.2)) { modelAppeared = true }
+            }
         }
     }
 
@@ -125,6 +113,97 @@ struct SettingsTabView: View {
         }
     }
 
+    private var voiceGroup: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(WDColor.ink)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Agent 语音")
+                            .font(WDFont.heading(16))
+                            .foregroundStyle(WDColor.ricePaper)
+                        Text(agentVoiceStatusText)
+                            .font(WDFont.caption(11))
+                            .foregroundStyle(WDColor.mist)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                }
+
+                VStack(spacing: 0) {
+                    toggleRow(icon: "mic", title: "语音输入",
+                              subtitle: "把你说的话转成当前行程 Agent 的问题",
+                              isOn: sessionAgentVoiceInputBinding)
+                    Divider().overlay(WDColor.mist.opacity(0.12)).padding(.vertical, 4)
+                    toggleRow(icon: "speaker.wave.2", title: "朗读回复",
+                              subtitle: "Agent 回答后用系统中文语音本地播报",
+                              isOn: sessionAgentSpokenRepliesBinding)
+                    Divider().overlay(WDColor.mist.opacity(0.12)).padding(.vertical, 4)
+                    toggleRow(icon: "bell.and.waves.left.and.right", title: "主动式 AI 播报",
+                              subtitle: "风险、偏航、进度等主动提醒可直接出声",
+                              isOn: sessionAgentProactiveSpeechBinding)
+                    Divider().overlay(WDColor.mist.opacity(0.12)).padding(.vertical, 4)
+                    row(icon: "gearshape", title: "语音权限", value: "系统设置") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+        }
+    }
+
+    private var exoskeletonSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("WUDAX 膝关节外骨骼")
+                        .font(WDFont.heading(17))
+                        .foregroundStyle(WDColor.ricePaper)
+                    Label("拖动旋转 · 双指缩放", systemImage: "rotate.3d")
+                        .font(WDFont.caption(11))
+                        .foregroundStyle(WDColor.mist)
+                }
+                Spacer()
+                Text(modelLoadState == false ? "资源异常" : "设备数据尚未连接")
+                    .font(WDFont.caption(10).weight(.semibold))
+                    .foregroundStyle(modelLoadState == false ? WDColor.amber : WDColor.mist)
+            }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(WDColor.mossSurface.opacity(0.72))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(WDColor.line.opacity(0.55), lineWidth: 1)
+                    )
+
+                ExoModelView(loadState: $modelLoadState, reduceMotion: reduceMotion)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .opacity(modelAppeared && modelLoadState != false ? 1 : 0)
+                    .scaleEffect(reduceMotion || modelAppeared ? 1 : 0.92)
+
+                if modelLoadState == false {
+                    VStack(spacing: 10) {
+                        Image(systemName: "cube.transparent")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundStyle(WDColor.amber)
+                        Text("3D 模型资源未能加载")
+                            .font(WDFont.body(14).weight(.medium))
+                            .foregroundStyle(WDColor.ricePaper)
+                        Text("权限与其他设置仍可正常使用")
+                            .font(WDFont.caption(11))
+                            .foregroundStyle(WDColor.mist)
+                    }
+                }
+            }
+            .frame(height: 320)
+            .accessibilityLabel(modelLoadState == false ? "外骨骼 3D 模型加载失败" : "可交互的 WUDAX 膝关节外骨骼 3D 模型")
+            .accessibilityHint("单指拖动旋转，双指缩放")
+        }
+    }
+
     private func row(icon: String, title: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
@@ -137,6 +216,59 @@ struct SettingsTabView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+    }
+
+    private func toggleRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(WDColor.bamboo)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(WDFont.body(15)).foregroundStyle(WDColor.ricePaper)
+                Text(subtitle).font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(WDColor.ink)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var agentVoiceStatusText: String {
+        "本机语音输入优先走离线识别；没有权限或设备不支持时，仍保留文字输入。"
+    }
+
+    private var sessionAgentVoiceInputBinding: Binding<Bool> {
+        Binding(
+            get: { sessionAgent.voicePreferences.voiceInputEnabled },
+            set: { newValue in
+                guard sessionAgent.voicePreferences.voiceInputEnabled != newValue else { return }
+                sessionAgent.toggleVoiceInput()
+            }
+        )
+    }
+
+    private var sessionAgentSpokenRepliesBinding: Binding<Bool> {
+        Binding(
+            get: { sessionAgent.voicePreferences.spokenRepliesEnabled },
+            set: { newValue in
+                guard sessionAgent.voicePreferences.spokenRepliesEnabled != newValue else { return }
+                sessionAgent.toggleSpokenReplies()
+            }
+        )
+    }
+
+    private var sessionAgentProactiveSpeechBinding: Binding<Bool> {
+        Binding(
+            get: { sessionAgent.voicePreferences.proactiveSpeechEnabled },
+            set: { newValue in
+                guard sessionAgent.voicePreferences.proactiveSpeechEnabled != newValue else { return }
+                sessionAgent.toggleProactiveSpeech()
+            }
+        )
     }
 
     private var aboutCard: some View {

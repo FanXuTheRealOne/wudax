@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WUDAX 膝关节外骨骼 3D 模型</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <style>
+      :root {
+        --canvas: #f3f6f0;
+        --paper: #fcfbf6;
+        --pine: #17382d;
+        --ink: #26352f;
+        --muted: #66766e;
+        --moss: #e7efe5;
+        --spring: #72aaa5;
+        --sun: #eca451;
+        --line: #dce4dc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 18% 12%, rgba(114, 170, 165, 0.18), transparent 28rem),
+          radial-gradient(circle at 82% 18%, rgba(236, 164, 81, 0.12), transparent 24rem),
+          var(--canvas);
+      }
+
+      main {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 40px 0;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 22px;
+        align-items: stretch;
+      }
+
+      .viewer-card,
+      .copy-card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(252, 251, 246, 0.92);
+        box-shadow: 0 18px 42px rgba(23, 56, 45, 0.08);
+        overflow: hidden;
+      }
+
+      model-viewer {
+        width: 100%;
+        height: min(72vh, 680px);
+        min-height: 440px;
+        background:
+          linear-gradient(180deg, rgba(252, 251, 246, 0.4), rgba(231, 239, 229, 0.72)),
+          var(--paper);
+        --poster-color: var(--paper);
+      }
+
+      .copy-card {
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 28px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--pine);
+        font-family: Georgia, "Times New Roman", "Songti SC", serif;
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 16px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.75;
+      }
+
+      .hints {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .hints li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .hints li::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        flex: 0 0 auto;
+        margin-top: 7px;
+        border-radius: 999px;
+        background: var(--sun);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 14px;
+        color: #f6faf3;
+        background: var(--pine);
+        font-size: 14px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      a.button.secondary {
+        color: var(--pine);
+        background: var(--moss);
+      }
+
+      .fallback {
+        padding: 14px 16px;
+        border-radius: 16px;
+        color: var(--muted);
+        background: var(--moss);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 860px) {
+        main {
+          padding: 20px 0;
+        }
+
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        model-viewer {
+          height: 62vh;
+          min-height: 360px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="shell" aria-label="WUDAX 膝关节外骨骼 3D 模型交互查看器">
+        <div class="viewer-card">
+          <model-viewer
+            src="assets/3d/exoskeleton.glb"
+            ios-src="assets/3d/exoskeleton.usdz"
+            alt="WUDAX 膝关节外骨骼 3D 模型"
+            camera-controls
+            touch-action="pan-y"
+            auto-rotate
+            auto-rotate-delay="1200"
+            rotation-per-second="18deg"
+            shadow-intensity="0.65"
+            exposure="0.95"
+            environment-image="neutral"
+            ar
+            ar-modes="webxr scene-viewer quick-look">
+            <div class="fallback" slot="poster">
+              正在载入 3D 模型。若长时间没有显示，请确认使用现代浏览器并通过本地 HTTP 服务打开本页。
+            </div>
+          </model-viewer>
+        </div>
+
+        <aside class="copy-card">
+          <div>
+            <p class="eyebrow">Interactive 3D asset</p>
+            <h1>WUDAX 膝关节外骨骼</h1>
+            <p>
+              这是仓库内的可交互模型查看器。拖动旋转，滚轮或双指缩放；在支持 AR 的设备上可进入 Quick Look / Scene Viewer。
+            </p>
+          </div>
+
+          <ul class="hints" aria-label="交互说明">
+            <li>模型文件来自 <code>assets/3d/exoskeleton.glb</code> 与 <code>assets/3d/exoskeleton.usdz</code>。</li>
+            <li>README 不能直接执行自定义 3D JavaScript，因此交互放在这个独立页面里。</li>
+            <li>本页可本地打开；如果仓库启用 GitHub Pages，同一文件也可在线交互。</li>
+          </ul>
+
+          <div class="actions">
+            <a class="button" href="assets/3d/exoskeleton.glb">下载 GLB</a>
+            <a class="button secondary" href="assets/3d/exoskeleton.usdz">下载 USDZ</a>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

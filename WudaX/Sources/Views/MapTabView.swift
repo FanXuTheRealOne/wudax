@@ -63,7 +63,7 @@ struct MapTabView: View {
             }
             focusRoute()
         }
-        .onChange(of: navigation.selectedMapRouteID) { _ in
+        .onChange(of: navigation.selectedMapRouteID) {
             focusRoute()
         }
         .onReceive(session.location.objectWillChange) { _ in
@@ -169,30 +169,18 @@ struct MapTabView: View {
     }
 
     private var mapFocusControls: some View {
-        HStack(spacing: 10) {
+        // 与行中 session 页完全一致的控制:路线聚焦 + 定位循环(概览→跟随→概览)。
+        HStack {
             Spacer()
-            Button(action: focusRoute) {
-                Label("路线聚焦", systemImage: "arrow.up.left.and.arrow.down.right")
+            MapCameraControls(cameraMode: $cameraMode, cameraRequestID: $cameraRequestID) {
+                session.location.startMonitoring()
             }
-            .buttonStyle(MapFocusButtonStyle(isSelected: cameraMode == .route))
-
-            Button(action: focusUserLocation) {
-                Label("自身定位", systemImage: "location.fill")
-            }
-            .buttonStyle(MapFocusButtonStyle(isSelected: cameraMode == .user))
         }
         .padding(.horizontal, 16)
     }
 
     private func focusRoute() {
         cameraMode = .route
-        cameraRequestID += 1
-        Haptics.tap()
-    }
-
-    private func focusUserLocation() {
-        session.location.startMonitoring()
-        cameraMode = .user
         cameraRequestID += 1
         Haptics.tap()
     }
@@ -206,7 +194,7 @@ struct MapTabView: View {
                         Label("朝向 \(Int(heading.rounded()))°", systemImage: "location.north.fill")
                             .font(WDFont.caption(10)).foregroundStyle(WDColor.bamboo)
                     } else {
-                        Text("点击“自身定位”显示实时位置与朝向")
+                        Text("点定位按钮查看实时位置与朝向;再点切换概览/跟随")
                             .font(WDFont.caption(10)).foregroundStyle(WDColor.mist)
                     }
                 }
@@ -222,20 +210,5 @@ struct MapTabView: View {
             Image(systemName: "map").font(.system(size: 40, weight: .ultraLight)).foregroundStyle(WDColor.mist.opacity(0.5))
             Text("导入路线后可在此查看").font(WDFont.body(15)).foregroundStyle(WDColor.mist)
         }
-    }
-}
-
-private struct MapFocusButtonStyle: ButtonStyle {
-    let isSelected: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(WDFont.caption(11).weight(.semibold))
-            .foregroundStyle(isSelected ? WDColor.ink : WDColor.ricePaper)
-            .padding(.horizontal, 13).padding(.vertical, 10)
-            .background(
-                Capsule().fill(isSelected ? WDColor.bamboo : WDColor.deepMoss.opacity(configuration.isPressed ? 0.78 : 0.96))
-            )
-            .overlay(Capsule().stroke(WDColor.line.opacity(isSelected ? 0 : 0.72), lineWidth: 1))
     }
 }

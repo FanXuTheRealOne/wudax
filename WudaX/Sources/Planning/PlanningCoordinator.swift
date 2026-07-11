@@ -7,6 +7,13 @@ final class PlanningCoordinator: ObservableObject {
         case idle, collecting, routeImported, ready
     }
 
+    enum GPXImportPhase: Equatable {
+        case idle
+        case importing
+        case imported
+        case failed
+    }
+
     struct ChatItem: Identifiable, Equatable {
         let id = UUID()
         var role: Role
@@ -25,6 +32,7 @@ final class PlanningCoordinator: ObservableObject {
     @Published private(set) var analyzedGPX: AnalyzedGPX?
     @Published private(set) var importedGPXData: Data?
     @Published private(set) var chat: [ChatItem] = []
+    @Published private(set) var importPhase: GPXImportPhase = .idle
     @Published var importError: String?
     @Published var experience = HikerExperience.load()
 
@@ -35,6 +43,7 @@ final class PlanningCoordinator: ObservableObject {
     private let parser = GPXParser()
     private let analyzer = GPXAnalyzer()
     private var healthKitCancellable: AnyCancellable?
+    private let minimumVisibleImportDurationNanoseconds: UInt64 = 350_000_000
 
     init() {
         healthKitCancellable = healthKit.objectWillChange.sink { [weak self] _ in
@@ -50,6 +59,7 @@ final class PlanningCoordinator: ObservableObject {
         analyzedGPX = nil
         importedGPXData = nil
         chat = []
+        importPhase = .idle
         importError = nil
         experience = HikerExperience.load()
     }
@@ -95,7 +105,18 @@ final class PlanningCoordinator: ObservableObject {
         }
     }
 
+    func importGPXWithProgress(from url: URL) async {
+        importPhase = .importing
+        importError = nil
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: minimumVisibleImportDurationNanoseconds)
+        importGPX(from: url)
+    }
+
     func importGPX(from url: URL) {
+        if importPhase != .importing {
+            importPhase = .importing
+        }
         do {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -106,10 +127,12 @@ final class PlanningCoordinator: ObservableObject {
             analyzedGPX = analyzed
             importedGPXData = data
             stage = .routeImported
+            importPhase = .imported
             let stats = analyzed.statistics
             addAssistant("路线已解析:\(document.name)。\(fmt(stats.distanceMeters / 1000)) km、爬升 \(Int(stats.ascentMeters)) m、质量 \(analyzed.qualityScore)/100。", card: .route)
         } catch {
             importError = error.localizedDescription
+            importPhase = .failed
             addStatus("GPX 导入失败:\(error.localizedDescription)")
         }
     }
@@ -120,6 +143,7 @@ final class PlanningCoordinator: ObservableObject {
         analyzedGPX = analyzed
         importedGPXData = try? JSONEncoder().encode(record.document)
         importError = nil
+        importPhase = .imported
     }
 
     func buildPlan(profile: FatigueProfile) -> PlanningResult? {

@@ -51,6 +51,37 @@ final class PlanningCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testImportGPXPublishesImportingPhaseBeforeCompletion() async throws {
+        let coordinator = PlanningCoordinator()
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
+        var phases: [PlanningCoordinator.GPXImportPhase] = []
+        let cancellable = coordinator.$importPhase.sink { phases.append($0) }
+
+        await coordinator.importGPXWithProgress(from: url)
+
+        XCTAssertTrue(phases.contains(.importing))
+        XCTAssertEqual(coordinator.importPhase, .imported)
+        XCTAssertNotNil(coordinator.analyzedGPX)
+        _ = cancellable
+    }
+
+    @MainActor
+    func testImportGPXProgressRemainsVisibleLongEnoughToRender() async throws {
+        let coordinator = PlanningCoordinator()
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "sanitized-route", withExtension: "gpx"))
+
+        let task = Task { await coordinator.importGPXWithProgress(from: url) }
+        await Task.yield()
+        XCTAssertEqual(coordinator.importPhase, .importing)
+
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertEqual(coordinator.importPhase, .importing)
+
+        await task.value
+        XCTAssertEqual(coordinator.importPhase, .imported)
+    }
+
+    @MainActor
     func testExperienceIsRequiredBeforeBuildingReport() throws {
         let coordinator = PlanningCoordinator()
         coordinator.experience = HikerExperience()
