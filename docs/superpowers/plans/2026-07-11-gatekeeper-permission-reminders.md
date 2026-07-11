@@ -4,7 +4,7 @@
 
 **Goal:** Only render unresolved offline-resource and permission reminders on the departure gate, hiding the entire reminder card once everything is ready.
 
-**Architecture:** Add a pure `GatekeeperReadiness` value type that converts three readiness booleans into an ordered list of unresolved notices. `GatekeeperView` derives this value from its existing services, uses it for both gating and conditional rendering, and keeps the existing authorization request flow unchanged.
+**Architecture:** Add a pure `GatekeeperReadiness` value type that converts three readiness booleans into an ordered list of unresolved notices. The current departure gate lives in `BudgetCardView`; it derives this value from its existing services, uses it for both gating and conditional rendering, explicitly observes nested service changes, and keeps the existing authorization request flow unchanged.
 
 **Tech Stack:** Swift 5.9, SwiftUI, XCTest, XcodeGen, iOS 17+
 
@@ -22,7 +22,7 @@
 
 **Files:**
 - Create: `WudaX/Tests/GatekeeperReadinessTests.swift`
-- Modify: `WudaX/Sources/Views/GatekeeperView.swift`
+- Modify: `WudaX/Sources/Views/BudgetCardView.swift`
 - Regenerate: `WudaX/WudaX.xcodeproj/project.pbxproj`
 
 **Interfaces:**
@@ -112,7 +112,7 @@ Expected: FAIL because `GatekeeperReadiness` does not yet exist.
 
 - [ ] **Step 3: Add the minimal pure readiness model**
 
-Add above `GatekeeperView` in `WudaX/Sources/Views/GatekeeperView.swift`:
+Add above `BudgetCardView` in `WudaX/Sources/Views/BudgetCardView.swift`:
 
 ```swift
 struct GatekeeperReadiness: Equatable {
@@ -138,7 +138,7 @@ struct GatekeeperReadiness: Equatable {
 
 - [ ] **Step 4: Make the view render only unresolved notices**
 
-In `GatekeeperView`, derive readiness from the existing services:
+In `BudgetCardView`, derive readiness from the existing services:
 
 ```swift
 private var readiness: GatekeeperReadiness {
@@ -159,6 +159,8 @@ if !readiness.notices.isEmpty {
 ```
 
 Replace the three unconditional rows with a `ForEach` over `readiness.notices`. Render `GPX / 路线资源 — 未准备`, `定位 — 请开启`, and `通知 — 请开启` for their respective cases. Show `integrityMessage` only when `.offlineResources` is present. Use the existing amber warning color and remove the unused success-state parameters from `auditRow`.
+
+Add a local revision state and `onReceive` subscriptions for `session.location.objectWillChange`, `session.notifications.objectWillChange`, and `session.offlineResources.objectWillChange` so an authorization change immediately recomputes the card without broadening `TripSession`'s update surface.
 
 - [ ] **Step 5: Run the focused tests and verify GREEN**
 
@@ -189,7 +191,7 @@ Expected: both commands end with success and contain no new warnings caused by t
 - [ ] **Step 7: Commit the implementation**
 
 ```bash
-git add WudaX/Sources/Views/GatekeeperView.swift \
+git add WudaX/Sources/Views/BudgetCardView.swift \
   WudaX/Tests/GatekeeperReadinessTests.swift \
   WudaX/WudaX.xcodeproj/project.pbxproj
 git commit -m "fix: hide resolved departure permissions"

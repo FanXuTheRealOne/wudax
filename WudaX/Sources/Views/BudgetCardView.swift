@@ -3,10 +3,31 @@ import SwiftUI
 // MARK: - 阶段一产出:行前报告(match report + 装备确认合并页)
 // 看完「本次路线 × 过往经历」的比对报告,在同一页勾完装备与权限,直接出发。
 
+struct GatekeeperReadiness: Equatable {
+    enum Notice: Hashable {
+        case offlineResources
+        case locationPermission
+        case notificationPermission
+    }
+
+    let offlineResourcesReady: Bool
+    let locationAuthorized: Bool
+    let notificationsAuthorized: Bool
+
+    var notices: [Notice] {
+        var result: [Notice] = []
+        if !offlineResourcesReady { result.append(.offlineResources) }
+        if !locationAuthorized { result.append(.locationPermission) }
+        if !notificationsAuthorized { result.append(.notificationPermission) }
+        return result
+    }
+}
+
 struct BudgetCardView: View {
     @EnvironmentObject var session: TripSession
     @State private var appeared = false
     @State private var checks: [GateItem] = []
+    @State private var readinessRevision = 0
 
     struct GateItem: Identifiable {
         let id = UUID()
@@ -25,11 +46,19 @@ struct BudgetCardView: View {
     private var locationReady: Bool {
         session.location.authorizationState == .whenInUse || session.location.authorizationState == .always
     }
+    private var readiness: GatekeeperReadiness {
+        GatekeeperReadiness(
+            offlineResourcesReady: session.offlineResources.status.isReady,
+            locationAuthorized: locationReady,
+            notificationsAuthorized: session.notifications.authorizationGranted
+        )
+    }
     private var gateReady: Bool {
-        allRequiredDone && locationReady && session.notifications.authorizationGranted && session.offlineResources.status.isReady
+        allRequiredDone && readiness.notices.isEmpty
     }
 
     var body: some View {
+        let _ = readinessRevision
         VStack(spacing: 0) {
             topBar
             ScrollView(showsIndicators: false) {
@@ -41,7 +70,9 @@ struct BudgetCardView: View {
                     suppliesCard
                     equipmentChecklist
                     checkpointsCard
-                    permissionCard
+                    if !readiness.notices.isEmpty {
+                        permissionCard
+                    }
                     Spacer(minLength: 8)
                     PillButton(
                         title: gateReady ? "接受风险并出发" : "先完成装备与权限确认",
@@ -64,6 +95,15 @@ struct BudgetCardView: View {
         .onAppear {
             withAnimation(.spring(duration: 0.8).delay(0.1)) { appeared = true }
             if checks.isEmpty { rebuildChecks() }
+        }
+        .onReceive(session.location.objectWillChange) { _ in
+            readinessRevision &+= 1
+        }
+        .onReceive(session.notifications.objectWillChange) { _ in
+            readinessRevision &+= 1
+        }
+        .onReceive(session.offlineResources.objectWillChange) { _ in
+            readinessRevision &+= 1
         }
     }
 
@@ -256,24 +296,31 @@ struct BudgetCardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("离线与权限", systemImage: "checklist")
                     .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                auditRow(title: "GPX / 路线资源", value: session.offlineResources.status.isReady ? "已就绪" : "未准备",
-                         ok: session.offlineResources.status.isReady)
-                auditRow(title: "定位", value: locationReady ? "已授权" : "等待授权", ok: locationReady)
-                auditRow(title: "通知", value: session.notifications.authorizationGranted ? "已授权" : "等待授权",
-                         ok: session.notifications.authorizationGranted)
-                Text(session.offlineResources.status.integrityMessage)
-                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                ForEach(readiness.notices, id: \.self) { notice in
+                    switch notice {
+                    case .offlineResources:
+                        auditRow(title: "GPX / 路线资源", value: "未准备")
+                    case .locationPermission:
+                        auditRow(title: "定位", value: "请开启")
+                    case .notificationPermission:
+                        auditRow(title: "通知", value: "请开启")
+                    }
+                }
+                if readiness.notices.contains(.offlineResources) {
+                    Text(session.offlineResources.status.integrityMessage)
+                        .font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+                }
             }
         }
     }
 
-    private func auditRow(title: String, value: String, ok: Bool) -> some View {
+    private func auditRow(title: String, value: String) -> some View {
         HStack {
-            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(WDColor.amber)
             Text(title).font(WDFont.body(14)).foregroundStyle(WDColor.ricePaper)
             Spacer()
-            Text(value).font(WDFont.caption()).foregroundStyle(ok ? WDColor.bamboo : WDColor.amber)
+            Text(value).font(WDFont.caption()).foregroundStyle(WDColor.amber)
         }
     }
 
