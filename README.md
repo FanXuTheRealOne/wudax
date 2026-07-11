@@ -24,11 +24,13 @@
   <img src="docs/images/app/data.jpg" alt="WUDAX 疲劳档案" width="23%" />
 </p>
 
-## 产品演示
+<h2 align="center">产品概念演示</h2>
 
-[![WUDAX 端侧 Agent 产品演示](assets/video/wudax-agent-demo.gif)](assets/video/wudax-agent-demo.mp4)
-
-动态预览会在 README 中直接播放；点击画面可打开带声音的 MP4 原片。
+<p align="center">
+  <a href="assets/video/wudax-agent-demo.mp4">
+    <img src="assets/video/wudax-agent-demo.gif" alt="WUDAX 产品概念演示" width="560" />
+  </a>
+</p>
 
 ---
 
