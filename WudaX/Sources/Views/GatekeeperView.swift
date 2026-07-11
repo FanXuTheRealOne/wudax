@@ -44,8 +44,8 @@ struct GatekeeperView: View {
 
                     PillButton(
                         title: gateReady ? "接受风险并出发" : "先完成出发检查",
-                        color: gateReady ? WDColor.ricePaper : WDColor.mossSurface,
-                        textColor: gateReady ? WDColor.ink : WDColor.mist
+                        color: gateReady ? WDColor.ink : WDColor.mossSurface,
+                        textColor: gateReady ? WDColor.onDark : WDColor.mist
                     ) {
                         if gateReady { session.depart() }
                     }

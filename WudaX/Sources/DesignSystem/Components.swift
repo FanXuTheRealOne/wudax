@@ -36,8 +36,9 @@ struct InkCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(light ? WDColor.ricePaper : WDColor.deepMoss)
-                    .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+                    .fill(WDColor.deepMoss)
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(WDColor.line, lineWidth: 1))
+                    .shadow(color: WDColor.ink.opacity(0.06), radius: 14, y: 6)
             )
     }
 }
@@ -46,8 +47,8 @@ struct InkCard<Content: View>: View {
 
 struct PillButton: View {
     let title: String
-    var color: Color = WDColor.ricePaper
-    var textColor: Color = WDColor.ink
+    var color: Color = WDColor.ink
+    var textColor: Color = WDColor.onDark
     var action: () -> Void
 
     var body: some View {
@@ -57,7 +58,8 @@ struct PillButton: View {
                 .foregroundStyle(textColor)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Capsule().fill(color))
+                .background(RoundedRectangle(cornerRadius: 16).fill(color)
+                    .shadow(color: color.opacity(0.22), radius: 10, y: 6))
         }
         .buttonStyle(.plain)
     }
@@ -65,17 +67,17 @@ struct PillButton: View {
 
 struct GhostButton: View {
     let title: String
-    var color: Color = WDColor.mist
+    var color: Color = WDColor.ink
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(WDFont.body(15))
+                .font(WDFont.body(15).weight(.medium))
                 .foregroundStyle(color)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 14).stroke(color.opacity(0.45), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

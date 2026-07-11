@@ -113,11 +113,11 @@ struct ChatView: View {
             if isUser { Spacer(minLength: 40) }
             Text(m.text.isEmpty ? "…" : m.text)
                 .font(WDFont.body(15))
-                .foregroundStyle(isUser ? WDColor.ink : WDColor.ricePaper)
+                .foregroundStyle(isUser ? WDColor.onDark : WDColor.ricePaper)
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(isUser ? WDColor.ricePaper : WDColor.deepMoss)
+                        .fill(isUser ? WDColor.ink : WDColor.deepMoss)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)

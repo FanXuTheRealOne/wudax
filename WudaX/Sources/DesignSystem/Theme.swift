@@ -4,24 +4,33 @@ import SwiftUI
 // 品牌内核：庄子「无待」— 无感、自然、舒适。平时安静，关键时刻主动。
 
 enum WDColor {
-    /// 墨松绿 — 主背景
-    static let inkPine = Color(hex: 0x0F1E18)
-    /// 深苔绿 — 卡片深底 / 次级背景
-    static let deepMoss = Color(hex: 0x1B2B25)
-    /// 苔面 — 浮层
-    static let mossSurface = Color(hex: 0x24352E)
-    /// 宣纸白 — 亮色卡片 / 主文字
-    static let ricePaper = Color(hex: 0xF5F1E8)
-    /// 雾灰绿 — 次级文字
-    static let mist = Color(hex: 0x8FA39A)
-    /// 琥珀 — 谨慎 / 提醒
-    static let amber = Color(hex: 0xD9822B)
+    // 清新山野 · 浅色主题(沿用队友 preview/fresh.css 的设计语言)
+    // 名字保持不变以兼容全部视图,但语义重映射为浅色主题的角色。
+
+    /// 主背景 — 清新米绿画布(原「墨松绿」角色 → 现浅底)
+    static let inkPine = Color(hex: 0xF3F6F0)
+    /// 卡片背景 — 宣纸白(原深卡 → 现白卡)
+    static let deepMoss = Color(hex: 0xFCFBF6)
+    /// 浅色表面 — 淡青绿(chips / 缩略图 / 开关底)
+    static let mossSurface = Color(hex: 0xE7EFE5)
+    /// 主文字 — 深墨绿(原「宣纸白正文」→ 现深字)
+    static let ricePaper = Color(hex: 0x26352F)
+    /// 次级文字 — 雾灰绿
+    static let mist = Color(hex: 0x66766E)
+    /// 琥珀 / 阳光橙 — 谨慎 / 提醒 / 强调
+    static let amber = Color(hex: 0xE39A45)
     /// 朱砂 — 撤退 / 危险
-    static let cinnabar = Color(hex: 0xC0452E)
-    /// 竹青 — 安全 / 继续
-    static let bamboo = Color(hex: 0x5F8D6B)
-    /// 墨色 — 亮卡上的文字
-    static let ink = Color(hex: 0x1C221F)
+    static let cinnabar = Color(hex: 0xC24A3E)
+    /// 松绿 — 安全 / 继续 / 图形描边
+    static let bamboo = Color(hex: 0x4C8163)
+    /// 深松绿 — 主按钮填充 / 强调标题
+    static let ink = Color(hex: 0x17382D)
+    /// 深色表面上的浅字(主按钮 / 手表 mockup 文字)
+    static let onDark = Color(hex: 0xF6FAF3)
+    /// 分隔线
+    static let line = Color(hex: 0xDCE4DC)
+    /// 手表 / 灵动岛等刻意保持深色的表面
+    static let nightSurface = Color(hex: 0x1B2B25)
 }
 
 extension Color {
