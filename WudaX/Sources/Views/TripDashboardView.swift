@@ -216,6 +216,7 @@ struct TripDashboardView: View {
                 RouteMapView(
                     points: document.points,
                     currentCoordinate: session.location.latestLocation?.coordinate,
+                    userHeadingDegrees: session.location.headingDegrees,
                     matchedCoordinate: session.routeMatch?.matchedCoordinate,
                     horizontalAccuracyMeters: session.location.latestLocation?.horizontalAccuracy,
                     matchConfidence: session.routeMatch?.confidence,
