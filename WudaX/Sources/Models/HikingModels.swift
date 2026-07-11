@@ -353,6 +353,9 @@ struct SupplyBudgetResult: Codable, Equatable, Sendable {
     var waterRatePerHour: Double
     var feedingRatePerHour: Double
     var explanation: String
+    var mealsCount: Int = 0
+    var electrolyteLiters: Double = 0
+    var isOvernight: Bool = false
 }
 
 struct EquipmentItem: Identifiable, Codable, Equatable, Sendable {

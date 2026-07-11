@@ -3,6 +3,62 @@ import Foundation
 enum HikingRuleTools {
     static func analyzeGPX(_ analyzed: AnalyzedGPX) -> AnalyzedGPX { analyzed }
 
+    // MARK: 本次路线 × 过往经历 交叉比对（行前核心）
+
+    /// 用「走过最难的一次」与本次路线交叉比对,得出难度、风险、个性化耗时与分析。
+    static func compareToExperience(route: Route, experience: HikerExperience) -> RouteComparison {
+        let routeMaxAlt = route.elevationProfile.max() ?? experience.highestAltitudeM
+        // 个性化耗时:用户在其最难一次里表现出的相对通用配速的系数,套到本次路线
+        let genericHoursForHardest = max(0.5, experience.hardestDistanceKm / 3.5 + experience.hardestAscentM / 600)
+        let userFactor = experience.isComplete && genericHoursForHardest > 0
+            ? max(0.7, min(1.8, experience.longestDurationH / genericHoursForHardest)) : 1.0
+        let genericHoursForRoute = max(0.5, route.distanceKm / 3.5 + route.ascentM / 600)
+        let estimatedHours = (genericHoursForRoute * userFactor).rounded(toPlaces: 1)
+
+        let distanceRatio = experience.hardestDistanceKm > 0 ? route.distanceKm / experience.hardestDistanceKm : 1
+        let ascentRatio = experience.hardestAscentM > 0 ? route.ascentM / experience.hardestAscentM : 1
+        let altitudeRatio = experience.highestAltitudeM > 0 ? routeMaxAlt / experience.highestAltitudeM : 1
+
+        // 超出历史的轴数决定风险
+        var exceededAxes = 0
+        var analysis: [String] = []
+        if ascentRatio > 1.05 {
+            exceededAxes += 1
+            analysis.append("累计拔高 \(Int(route.ascentM)) m，比你走过最难的一次(\(Int(experience.hardestAscentM)) m)高 \(Int((ascentRatio - 1) * 100))%。")
+        }
+        if altitudeRatio > 1.03 {
+            exceededAxes += 1
+            analysis.append("最高海拔约 \(Int(routeMaxAlt)) m，超过你到过的最高点(\(Int(experience.highestAltitudeM)) m)，高原反应与体温风险上升。")
+        }
+        if distanceRatio > 1.1 {
+            exceededAxes += 1
+            analysis.append("总距离 \(String(format: "%.1f", route.distanceKm)) km，长于你走过最难的一次(\(String(format: "%.1f", experience.hardestDistanceKm)) km)。")
+        }
+        if route.descentM >= 1200 {
+            analysis.append("后半程连续下降约 \(Int(route.descentM)) m，长下坡对膝盖压力集中。")
+        }
+
+        let difficultyLabel: String
+        let riskLevel: RiskLevel
+        switch exceededAxes {
+        case 0: difficultyLabel = "在能力范围内"; riskLevel = route.descentM >= 1200 ? .medium : .low
+        case 1: difficultyLabel = "有挑战"; riskLevel = .mediumHigh
+        case 2: difficultyLabel = "接近体能极限"; riskLevel = .high
+        default: difficultyLabel = "超出体能极限"; riskLevel = .high
+        }
+        if exceededAxes >= 2 {
+            analysis.append("多项指标同时超过你的历史最难,已接近或超出体能极限,但幅度尚可控,因此给出「\(riskLevel.rawValue)」风险,建议充分准备或降级。")
+        } else if analysis.isEmpty {
+            analysis.append("本次路线各项指标都在你走过的范围内,按常规准备即可。")
+        }
+
+        let isOvernight = estimatedHours > 13
+        return RouteComparison(difficultyLabel: difficultyLabel, riskLevel: riskLevel,
+                               estimatedHours: estimatedHours, isOvernight: isOvernight,
+                               analysis: analysis, distanceRatio: distanceRatio,
+                               ascentRatio: ascentRatio, altitudeRatio: altitudeRatio)
+    }
+
     static func calculateRouteLoad(route: Route) -> RouteLoadResult {
         let distance = route.distanceKm
         let ascent = route.ascentM
@@ -82,24 +138,40 @@ enum HikingRuleTools {
     }
 
     static func calculateSupplyBudget(route: Route, profile: FatigueProfile, temperatureCelsius: Double? = nil) -> SupplyBudgetResult {
+        let hours = route.estimatedHours
+        let isOvernight = hours > 13
+        // 单日高强度徒步:约 0.4 L/h 需水,含热修正;过夜额外备炊用水
         let heatFactor = max(0, (temperatureCelsius ?? 18) - 18) * 0.012
-        let waterRate = max(0.25, profile.waterRatePerHour + heatFactor)
-        let water = (route.estimatedHours * waterRate + 0.5).rounded(toPlaces: 1)
-        let foodRate = route.estimatedHours >= 8 ? 220.0 : 180.0
-        return SupplyBudgetResult(waterLiters: water, foodKilocalories: (route.estimatedHours * foodRate).rounded(),
+        let waterRate = 0.4 + heatFactor
+        let water = (hours * waterRate + (isOvernight ? 1.5 : 0.5)).rounded(toPlaces: 1)
+        let electrolyte = (water / 3).rounded(toPlaces: 1)   // 约 1/3 走电解质
+        // 单日高强度:约 260 kcal/h 需随身补充(非全部消耗,按可摄入量)
+        let foodRate = isOvernight ? 300.0 : 260.0
+        let totalKcal = (hours * foodRate).rounded()
+        // 餐数:主升/最高点/长下坡前后各补一次,约每 3 小时一餐
+        let meals = max(2, Int((hours / 3).rounded(.up)))
+        let explanation = isOvernight
+            ? "预计 \(String(format: "%.1f", hours)) 小时、需过夜(重装线):按每餐 ≥\(Int(totalKcal / Double(meals))) kcal 备 \(meals) 餐,含 \(electrolyte) L 电解质;炊具/宿营装备自备。"
+            : "预计 \(String(format: "%.1f", hours)) 小时单日高强度:备 \(meals) 餐、每餐 ≥\(Int(totalKcal / Double(meals))) kcal,其中电解质水约 \(electrolyte) L(占总水 1/3)。"
+        return SupplyBudgetResult(waterLiters: water, foodKilocalories: totalKcal,
                                   waterRatePerHour: waterRate, feedingRatePerHour: foodRate,
-                                  explanation: "按预计 \(String(format: "%.1f", route.estimatedHours)) 小时、个人耗水速率和 0.5 L 安全余量估算")
+                                  explanation: explanation, mealsCount: meals,
+                                  electrolyteLiters: electrolyte, isOvernight: isOvernight)
     }
 
     static func buildEquipmentChecklist(route: Route, supply: SupplyBudgetResult, qualityScore: Int = 100) -> [EquipmentItem] {
+        let headlampHours = supply.isOvernight ? 10 : 8
         var items = [
-            EquipmentItem(title: "头灯与备用电源", reason: "预计行程较长或可能接近日落", required: route.estimatedHours >= 6),
-            EquipmentItem(title: "保暖层与雨具", reason: "山脊风口和天气变化的基本余量", required: true),
-            EquipmentItem(title: "饮水与电解质", reason: "至少准备 \(String(format: "%.1f", supply.waterLiters)) L 水预算", required: true),
-            EquipmentItem(title: "基础急救与个人药品", reason: "离线行程的最低安全配置", required: true),
-            EquipmentItem(title: "离线 GPX 与纸面撤退点", reason: qualityScore < 70 ? "路线数据质量较低，增加冗余" : "无网络时保持方向感", required: true)
+            EquipmentItem(title: "头灯 + 备用电池", reason: "至少保证可用 \(headlampHours) 小时(约一个夜晚)", required: true),
+            EquipmentItem(title: "饮水 ≥ \(String(format: "%.1f", supply.waterLiters)) L", reason: "含电解质约 \(String(format: "%.1f", supply.electrolyteLiters)) L", required: true),
+            EquipmentItem(title: "食物 \(supply.mealsCount) 餐 / ≥ \(Int(supply.foodKilocalories)) kcal", reason: "按单日高强度能量需求", required: true),
+            EquipmentItem(title: "保暖层 + 雨具", reason: "山脊风口与天气变化的基本余量", required: true),
+            EquipmentItem(title: "登山杖", reason: "长下坡降低膝部负荷", required: route.descentM >= 1000 || route.hasUnverifiedSegment),
+            EquipmentItem(title: "离线 GPX + 撤退点标记", reason: qualityScore < 70 ? "轨迹质量偏低,增加冗余" : "无网络时保持方向感", required: true)
         ]
-        if route.hasUnverifiedSegment { items.append(.init(title: "登山杖", reason: "未验证路段和长下坡降低膝部负荷", required: true)) }
+        if supply.isOvernight {
+            items.append(.init(title: "宿营装备(帐篷/睡袋/炉具)", reason: "预计需过夜,按重装线准备", required: true))
+        }
         return items
     }
 
@@ -134,7 +206,7 @@ enum HikingRuleTools {
         var level: RiskLevel = decision.verdict == .retreat ? .high : decision.verdict == .downgrade ? .mediumHigh : decision.verdict == .cautious ? .medium : .low
         var reasons = decision.reasons
         if let heartRate = snapshot?.reading(.heartRate)?.value, heartRate >= 150 {
-            reasons.append("最近心率样本为 (Int(heartRate)) bpm，先降速并重新确认身体状态")
+            reasons.append("最近心率样本为 \(Int(heartRate)) bpm，先降速并重新确认身体状态")
             if level == .low { level = .medium }
         }
         if stale { reasons.append("部分身体数据已过期，当前结论可信度降低") }

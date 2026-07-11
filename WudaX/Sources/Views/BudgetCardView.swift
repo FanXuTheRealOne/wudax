@@ -1,10 +1,15 @@
 import SwiftUI
 
-// MARK: - 阶段一产出：行程预算卡
+// MARK: - 阶段一产出：行程预算卡（本次路线 × 过往经历 交叉比对）
 
 struct BudgetCardView: View {
     @EnvironmentObject var session: TripSession
     @State private var appeared = false
+
+    private var comparison: RouteComparison? { session.planningResult?.comparison }
+    private var supply: SupplyBudgetResult? { session.planningResult?.supply }
+    private var exp: HikerExperience { session.planning.experience }
+    private var route: Route { session.plan.route }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,9 +17,9 @@ struct BudgetCardView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     riskHeader
-                    readinessCard
+                    comparisonCard
                     profileCard
-                    risksCard
+                    analysisCard
                     suppliesCard
                     equipmentCard
                     checkpointsCard
@@ -44,15 +49,14 @@ struct BudgetCardView: View {
     private var riskHeader: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(session.plan.route.name)
+                Text(route.name)
                     .font(WDFont.heading(20)).foregroundStyle(WDColor.ricePaper)
-                if let dep = session.plan.departureTime {
-                    Text("\(dep, format: .dateTime.hour().minute()) 出发 · 日落 19:12")
-                        .font(WDFont.mono(13)).foregroundStyle(WDColor.mist)
+                Text(comparison?.difficultyLabel ?? session.plan.challengeGapLabel)
+                    .font(WDFont.body(13).weight(.medium)).foregroundStyle(session.plan.riskLevel.color)
+                if let c = comparison {
+                    Text("为你预估耗时约 \(String(format: "%.1f", c.estimatedHours)) 小时\(c.isOvernight ? " · 需过夜(重装)" : " · 单日")")
+                        .font(WDFont.mono(12)).foregroundStyle(WDColor.mist)
                 }
-                Text("总风险等级")
-                    .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                    .padding(.top, 6)
             }
             Spacer()
             SealBadge(text: session.plan.riskLevel.rawValue,
@@ -62,16 +66,55 @@ struct BudgetCardView: View {
         }
     }
 
+    // 本次 × 你走过最难 —— 可视化对比
+    private var comparisonCard: some View {
+        InkCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("本次 × 你走过最难", systemImage: "arrow.left.and.right")
+                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
+                compareRow("距离", cur: route.distanceKm, ref: exp.hardestDistanceKm, unit: "km")
+                compareRow("累计拔高", cur: route.ascentM, ref: exp.hardestAscentM, unit: "m")
+                compareRow("最高海拔", cur: route.elevationProfile.max() ?? 0, ref: exp.highestAltitudeM, unit: "m")
+                Text("绿色=你走过最难的一次;琥珀=本次。超过基准即为新挑战。")
+                    .font(WDFont.caption(10)).foregroundStyle(WDColor.mist.opacity(0.8))
+            }
+        }
+    }
+
+    private func compareRow(_ label: String, cur: Double, ref: Double, unit: String) -> some View {
+        let ratio = ref > 0 ? cur / ref : 1
+        let over = ratio > 1.02
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(label).font(WDFont.body(13)).foregroundStyle(WDColor.ricePaper)
+                Spacer()
+                Text("\(fmt(cur, unit)) / 历史 \(fmt(ref, unit))")
+                    .font(WDFont.mono(12)).foregroundStyle(over ? WDColor.amber : WDColor.bamboo)
+            }
+            GeometryReader { geo in
+                let w = geo.size.width
+                let refFrac = 0.62                       // 基准固定占 62%
+                let curFrac = min(ratio * refFrac, 1.0)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(WDColor.mossSurface).frame(height: 8)
+                    Capsule().fill(WDColor.bamboo.opacity(0.5)).frame(width: w * refFrac, height: 8)
+                    Capsule().fill(over ? WDColor.amber : WDColor.bamboo).frame(width: w * curFrac, height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+    }
+
     private var profileCard: some View {
         InkCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("海拔剖面 · 3 个风险点")
+                Text("海拔剖面 · 关键风险点")
                     .font(WDFont.caption()).foregroundStyle(WDColor.mist)
                 ElevationProfileView(
-                    points: session.plan.route.elevationProfile,
-                    riskIndices: session.plan.route.riskPoints.map(\.profileIndex)
+                    points: route.elevationProfile,
+                    riskIndices: route.riskPoints.map(\.profileIndex)
                 )
-                ForEach(session.plan.route.riskPoints) { rp in
+                ForEach(route.riskPoints) { rp in
                     HStack(spacing: 8) {
                         Circle().fill(WDColor.amber).frame(width: 6, height: 6)
                         Text(rp.title).font(WDFont.body(13).weight(.medium))
@@ -85,30 +128,12 @@ struct BudgetCardView: View {
         }
     }
 
-    private var readinessCard: some View {
-        InkCard {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack {
-                    Label("今日准备度", systemImage: "waveform.path.ecg")
-                        .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
-                    Spacer()
-                    Text("\(session.plan.readinessScore) · \(session.plan.readinessLabel)")
-                        .font(WDFont.mono(13)).foregroundStyle(session.plan.readinessScore >= 60 ? WDColor.bamboo : WDColor.amber)
-                }
-                Text("路线挑战差距：\(session.plan.challengeGapLabel) · GPX 质量：\(session.plan.routeQualityScore)/100")
-                    .font(WDFont.caption()).foregroundStyle(WDColor.mist)
-                Text("分数只来自已提供的数据；缺失 HealthKit 样本不会被当作正常。")
-                    .font(WDFont.caption(11)).foregroundStyle(WDColor.mist.opacity(0.8))
-            }
-        }
-    }
-
-    private var risksCard: some View {
+    private var analysisCard: some View {
         InkCard {
             VStack(alignment: .leading, spacing: 14) {
-                Label("最需要警惕的 3 件事", systemImage: "exclamationmark.triangle")
+                Label("为什么是「\(session.plan.riskLevel.rawValue)」风险", systemImage: "exclamationmark.triangle")
                     .font(WDFont.heading(16)).foregroundStyle(WDColor.amber)
-                ForEach(Array(session.plan.topRisks.enumerated()), id: \.offset) { i, risk in
+                ForEach(Array((comparison?.analysis ?? session.plan.topRisks).enumerated()), id: \.offset) { i, risk in
                     HStack(alignment: .top, spacing: 12) {
                         Text("\(i + 1)")
                             .font(WDFont.mono(13)).foregroundStyle(WDColor.amber)
@@ -123,23 +148,32 @@ struct BudgetCardView: View {
     }
 
     private var suppliesCard: some View {
-        InkCard(light: true) {
+        InkCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("建议补给与装备")
-                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ink)
+                Label("补给方案", systemImage: "fork.knife")
+                    .font(WDFont.heading(16)).foregroundStyle(WDColor.ricePaper)
                 HStack(spacing: 10) {
-                    supplyChip("drop.fill", "水", "≥ \(String(format: "%.1f", session.plan.suggestedWaterL)) L",
-                               enough: (session.plan.waterL ?? 0) >= session.plan.suggestedWaterL)
-                    supplyChip("flame.fill", "食物", "≥ \(Int(session.plan.suggestedFoodKcal)) kcal",
-                               enough: (session.plan.foodKcal ?? 0) >= session.plan.suggestedFoodKcal)
-                    supplyChip("flashlight.on.fill", "头灯", "必带", enough: true)
+                    supplyChip("drop.fill", "水", "≥ \(fmt(session.plan.suggestedWaterL, "L"))")
+                    supplyChip("bolt.heart", "电解质", supply.map { fmt($0.electrolyteLiters, "L") } ?? "—")
+                    supplyChip("flame.fill", "食物", "\(supply?.mealsCount ?? 0) 餐")
                 }
-                if let w = session.plan.waterL, w < session.plan.suggestedWaterL {
-                    Text("你计划携带 \(String(format: "%.1f", w)) L，低于建议下限，出发前会再次确认。")
-                        .font(WDFont.caption()).foregroundStyle(WDColor.amber)
+                if let s = supply {
+                    Text(s.explanation).font(WDFont.caption()).foregroundStyle(WDColor.mist)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    private func supplyChip(_ icon: String, _ name: String, _ value: String) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 16)).foregroundStyle(WDColor.bamboo)
+            Text(name).font(WDFont.caption(11)).foregroundStyle(WDColor.mist)
+            Text(value).font(WDFont.mono(12)).foregroundStyle(WDColor.ricePaper)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.mossSurface))
     }
 
     private var equipmentCard: some View {
@@ -162,19 +196,6 @@ struct BudgetCardView: View {
         }
     }
 
-    private func supplyChip(_ icon: String, _ name: String, _ req: String, enough: Bool) -> some View {
-        VStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(enough ? WDColor.bamboo : WDColor.amber)
-            Text(name).font(WDFont.caption(11)).foregroundStyle(WDColor.ink.opacity(0.6))
-            Text(req).font(WDFont.mono(12)).foregroundStyle(WDColor.ink)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(WDColor.ink.opacity(0.05)))
-    }
-
     private var checkpointsCard: some View {
         InkCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -193,5 +214,9 @@ struct BudgetCardView: View {
                     .font(WDFont.caption()).foregroundStyle(WDColor.mist)
             }
         }
+    }
+
+    private func fmt(_ v: Double, _ unit: String) -> String {
+        (v >= 100 ? "\(Int(v))" : String(format: "%.1f", v)) + " " + unit
     }
 }
