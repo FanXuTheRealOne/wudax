@@ -66,9 +66,12 @@ struct RouteMapView: UIViewRepresentable {
         // 让 MapKit 自己管理 MKUserLocation，避免把 Core Location 坐标作为普通
         // annotation 重画后与中国区 Apple 底图产生显示链路差异。
         map.showsUserLocation = tracksUserLocation
-        map.showsCompass = false
+        // 使用 MapKit 原生双指旋转；地图偏离正北后显示系统指南针，
+        // 用户可以点击指南针快速回正，同时保留现有智能缩放与聚焦逻辑。
+        map.showsCompass = tracksUserLocation
         map.showsScale = false
-        map.isRotateEnabled = false
+        map.isRotateEnabled = true
+        map.isPitchEnabled = false
         map.isScrollEnabled = true
         map.isZoomEnabled = true
         map.pointOfInterestFilter = .excludingAll
@@ -95,6 +98,9 @@ struct RouteMapView: UIViewRepresentable {
         }
         if map.showsUserLocation != tracksUserLocation {
             map.showsUserLocation = tracksUserLocation
+        }
+        if map.showsCompass != tracksUserLocation {
+            map.showsCompass = tracksUserLocation
         }
 
         let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
