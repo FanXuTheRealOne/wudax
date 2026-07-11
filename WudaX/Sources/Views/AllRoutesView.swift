@@ -4,6 +4,7 @@ import SwiftUI
 struct AllRoutesView: View {
     @EnvironmentObject var session: TripSession
     @EnvironmentObject var library: RouteLibraryStore
+    @EnvironmentObject var navigation: AppNavigation
     @Environment(\.dismiss) private var dismiss
 
     @State private var renaming: RouteRecord?
@@ -43,10 +44,18 @@ struct AllRoutesView: View {
             }
         }
         .sheet(item: $detailRecord) { record in
-            RouteDetailView(record: record) {
-                detailRecord = nil
-                session.planRecord(record)
-            }
+            RouteDetailView(
+                record: record,
+                onStartPlanning: {
+                    detailRecord = nil
+                    session.planRecord(record)
+                },
+                onOpenMap: {
+                    detailRecord = nil
+                    dismiss()
+                    navigation.showRouteOnMap(record)
+                }
+            )
         }
         .alert("重命名路线", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("路线名称", text: $newName)

@@ -6,6 +6,15 @@ struct RouteDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let record: RouteRecord
     let onStartPlanning: () -> Void
+    let onOpenMap: () -> Void
+
+    init(record: RouteRecord,
+         onStartPlanning: @escaping () -> Void,
+         onOpenMap: @escaping () -> Void = {}) {
+        self.record = record
+        self.onStartPlanning = onStartPlanning
+        self.onOpenMap = onOpenMap
+    }
 
     private var prov: RouteProvenance { record.provenance }
 
@@ -20,6 +29,11 @@ struct RouteDetailView: View {
                             .frame(height: 260)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                             .overlay(RoundedRectangle(cornerRadius: 18).stroke(WDColor.mossSurface, lineWidth: 1))
+
+                        GhostButton(title: "在主地图中查看", color: WDColor.bamboo) {
+                            dismiss()
+                            onOpenMap()
+                        }
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text(record.name).font(WDFont.title(24)).foregroundStyle(WDColor.ricePaper)
