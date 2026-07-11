@@ -344,6 +344,25 @@ struct RouteMapView: UIViewRepresentable {
             return view.subviews.contains { containsActiveGesture(in: $0) }
         }
 
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            guard let annotation = userAnnotation,
+                  let puck = mapView.view(for: annotation) as? UserNavigationPuckView else { return }
+            puck.updateConeRadius(headingConeRadius(in: mapView))
+        }
+
+        private func headingConeRadius(in mapView: MKMapView) -> CGFloat {
+            guard mapView.bounds.width > 1,
+                  !mapView.visibleMapRect.isNull,
+                  !mapView.visibleMapRect.isEmpty else { return 27 }
+            let metersAcross = mapView.visibleMapRect.size.width
+                * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
+            let metersPerScreenPoint = metersAcross / Double(mapView.bounds.width)
+            guard metersPerScreenPoint.isFinite, metersPerScreenPoint > 0 else { return 27 }
+
+            // 光锥代表约 110 米的地面投射距离，随地图缩放换算为屏幕长度。
+            return min(max(CGFloat(110 / metersPerScreenPoint), 16), 72)
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let guide = overlay as? GuidePolyline {
                 let renderer = MKPolylineRenderer(polyline: guide)
@@ -377,6 +396,7 @@ struct RouteMapView: UIViewRepresentable {
                     ?? UserNavigationPuckView(annotation: annotation, reuseIdentifier: identifier)
                 view.annotation = annotation
                 view.update(headingDegrees: annotation.headingDegrees)
+                view.updateConeRadius(headingConeRadius(in: mapView))
                 return view
             }
 
@@ -507,13 +527,17 @@ private final class UserNavigationPuckView: MKAnnotationView {
     private let halo = CAShapeLayer()
     private let whiteRing = CAShapeLayer()
     private let blueDot = CAShapeLayer()
+    private var currentHeadingDegrees: CLLocationDirection?
+    private var coneRadius: CGFloat = 27
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 58, height: 58)
+        frame = CGRect(x: 0, y: 0, width: 164, height: 164)
         centerOffset = .zero
         backgroundColor = .clear
         canShowCallout = false
+        displayPriority = .required
+        isUserInteractionEnabled = false
         isOpaque = false
         setupLayers()
     }
@@ -526,14 +550,16 @@ private final class UserNavigationPuckView: MKAnnotationView {
         headingGradient.frame = bounds
         headingGradient.type = .radial
         headingGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
-        headingGradient.endPoint = CGPoint(x: 0.96, y: 0.5)
+        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
         headingGradient.colors = [
-            UIColor.systemBlue.withAlphaComponent(0.34).cgColor,
-            UIColor.systemBlue.withAlphaComponent(0.18).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0.38).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0.24).cgColor,
+            UIColor.systemBlue.withAlphaComponent(0.08).cgColor,
             UIColor.systemBlue.withAlphaComponent(0).cgColor
         ]
-        headingGradient.locations = [0, 0.52, 1]
+        headingGradient.locations = [0, 0.38, 0.76, 1]
         headingConeMask.frame = headingGradient.bounds
+        headingConeMask.fillColor = UIColor.white.cgColor
         headingGradient.mask = headingConeMask
 
         halo.path = UIBezierPath(ovalIn: CGRect(x: center.x - 17, y: center.y - 17, width: 34, height: 34)).cgPath
@@ -558,7 +584,24 @@ private final class UserNavigationPuckView: MKAnnotationView {
     }
 
     func update(headingDegrees: CLLocationDirection?) {
-        guard let headingDegrees else {
+        currentHeadingDegrees = headingDegrees
+        redrawCone(animated: true)
+    }
+
+    func updateConeRadius(_ radius: CGFloat) {
+        let clampedRadius = min(max(radius, 16), 72)
+        guard abs(clampedRadius - coneRadius) >= 0.5 else { return }
+        coneRadius = clampedRadius
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        headingGradient.endPoint = CGPoint(x: 0.5 + coneRadius / bounds.width, y: 0.5)
+        CATransaction.commit()
+        redrawCone(animated: false)
+    }
+
+    private func redrawCone(animated: Bool) {
+        guard let headingDegrees = currentHeadingDegrees else {
             headingConeMask.removeAllAnimations()
             headingConeMask.path = nil
             return
@@ -567,23 +610,29 @@ private final class UserNavigationPuckView: MKAnnotationView {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let radians = CGFloat((headingDegrees - 90) * .pi / 180)
         let spread: CGFloat = .pi / 10
-        let radius: CGFloat = 27
         let path = UIBezierPath()
         path.move(to: center)
         path.addArc(withCenter: center,
-                    radius: radius,
+                    radius: coneRadius,
                     startAngle: radians - spread,
                     endAngle: radians + spread,
                     clockwise: true)
         path.close()
 
-        let animation = CABasicAnimation(keyPath: "path")
-        animation.fromValue = (headingConeMask.presentation() as? CAShapeLayer)?.path ?? headingConeMask.path
-        animation.toValue = path.cgPath
-        animation.duration = 0.12
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        headingConeMask.add(animation, forKey: "headingPath")
+        if animated {
+            let animation = CABasicAnimation(keyPath: "path")
+            animation.fromValue = (headingConeMask.presentation() as? CAShapeLayer)?.path ?? headingConeMask.path
+            animation.toValue = path.cgPath
+            animation.duration = 0.12
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            headingConeMask.add(animation, forKey: "headingPath")
+        } else {
+            headingConeMask.removeAnimation(forKey: "headingPath")
+        }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         headingConeMask.path = path.cgPath
-        headingConeMask.fillColor = UIColor.white.cgColor
+        CATransaction.commit()
     }
 }
